@@ -6,6 +6,9 @@ const initialIssues = [
     id: 1,
     type: 'Pothole',
     location: 'Rainier Ave S',
+    neighborhood: 'Rainier Valley',
+    latitude: 47.5605,
+    longitude: -122.2885,
     description: 'Deep surface failure spanning the northbound curb lane.',
     priority: 'Critical',
     priorityScore: 94,
@@ -20,6 +23,9 @@ const initialIssues = [
     id: 2,
     type: 'Sidewalk Crack',
     location: '15th Ave NW',
+    neighborhood: 'Ballard',
+    latitude: 47.6687,
+    longitude: -122.3767,
     description: 'Multiple connected cracks creating an uneven pedestrian path.',
     priority: 'High',
     priorityScore: 81,
@@ -34,6 +40,9 @@ const initialIssues = [
     id: 3,
     type: 'Damaged Curb Ramp',
     location: 'Lake City Way NE',
+    neighborhood: 'Lake City',
+    latitude: 47.7195,
+    longitude: -122.2956,
     description: 'Visible curb ramp deterioration requiring inspection.',
     priority: 'High',
     priorityScore: 76,
@@ -48,6 +57,9 @@ const initialIssues = [
     id: 4,
     type: 'Road Crack',
     location: 'University Way NE',
+    neighborhood: 'University District',
+    latitude: 47.6615,
+    longitude: -122.3131,
     description: 'Longitudinal pavement cracking along the road surface.',
     priority: 'Medium',
     priorityScore: 64,
@@ -60,9 +72,34 @@ const initialIssues = [
   }
 ]
 
+function calculateDistance(latitude, longitude, issueLatitude, issueLongitude) {
+  const radians = value => value * Math.PI / 180
+  const latitudeDifference = radians(issueLatitude - latitude)
+  const longitudeDifference = radians(issueLongitude - longitude)
+  const a = Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(radians(latitude)) * Math.cos(radians(issueLatitude)) *
+    Math.sin(longitudeDifference / 2) ** 2
+  return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, a)))
+}
+
 function App() {
   const [issues, setIssues] = useState(initialIssues)
   const [filter, setFilter] = useState('all')
+  const [filterOpen, setFilterOpen] = useState(false)
+  const [filters, setFilters] = useState({
+    severity:[],
+    type: [],
+    reviewStatus: [],
+    workOrderStatus: [],
+    neighborhood: []
+  })
+
+  // Coordinate search inputs
+  const [coordinateFilter, setCoordinateFilter] = useState({
+    latitude: '',
+    longitude: '',
+    radius: 2
+  })
   const [severity, setSeverity] = useState('all')
   const [search, setSearch] = useState('')
   const [selectedIssue, setSelectedIssue] = useState(null)
@@ -77,39 +114,92 @@ function App() {
 
   // Filter Infrastructure Issues
   const filteredIssues = issues.filter((issue) => {
-    const matchesReview =
-      filter === 'all' ||
-      issue.reviewStatus === filter
 
+    // Severity
     const matchesSeverity =
-      severity === 'all' ||
-      issue.priority === severity
+      (severity === 'all' || issue.priority === severity) &&
+      (filters.severity.length === 0 || filters.severity.includes(issue.priority))
 
+    // Infrastructure type
+    const matchesType =
+      filters.type.length === 0 ||
+      filters.type.includes(issue.type)
+
+    // Review status
+    const matchesReview =
+      (filter === 'all' || issue.reviewStatus === filter) &&
+      (filters.reviewStatus.length === 0 || filters.reviewStatus.includes(issue.reviewStatus))
+
+    // Work order status
+    const matchesWorkOrder =
+      filters.workOrderStatus.length === 0 ||
+      filters.workOrderStatus.includes(issue.workOrderStatus)
+
+    // Neighborhood
+    const matchesNeighborhood =
+      filters.neighborhood.length === 0 ||
+      filters.neighborhood.includes(issue.neighborhood)
+
+    // Search bar
     const matchesSearch =
-      issue.location.toLowerCase().includes(search.trim().toLowerCase()) ||
-      issue.type.toLowerCase().includes(search.trim().toLowerCase())
+      issue.location.toLowerCase().includes(search.toLowerCase()) ||
+      issue.type.toLowerCase().includes(search.toLowerCase()) ||
+      issue.neighborhood.toLowerCase().includes(search.toLowerCase())
 
-    return matchesReview && matchesSeverity && matchesSearch
+    // Coordinate radius filter
+    let matchesCoordinates = true
+
+    const hasLatitude = coordinateFilter.latitude.trim() !== ''
+    const hasLongitude = coordinateFilter.longitude.trim() !== ''
+
+    if (hasLatitude && hasLongitude) {
+      const lat = Number(coordinateFilter.latitude)
+      const lon = Number(coordinateFilter.longitude)
+      const radius = Number(coordinateFilter.radius)
+
+      const validCoordinates =
+        Number.isFinite(lat) &&
+        Number.isFinite(lon) &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lon >= -180 &&
+        lon <= 180 &&
+        Number.isFinite(radius) &&
+        radius > 0
+
+      if (validCoordinates) {
+        const distance = calculateDistance(
+          lat,
+          lon,
+          issue.latitude,
+          issue.longitude
+        )
+
+        matchesCoordinates = distance <= radius
+      } else {
+        matchesCoordinates = false
+      }
+    } else if (hasLatitude || hasLongitude) {
+      matchesCoordinates = false
+    }
+
+    return (
+      matchesSeverity &&
+      matchesType &&
+      matchesReview &&
+      matchesWorkOrder &&
+      matchesNeighborhood &&
+      matchesSearch &&
+      matchesCoordinates
+    )
   })
 
-  // Dashboard Statistics
+
   const totalIssues = issues.length
-
-  const pendingReviews = issues.filter(
-    issue => issue.reviewStatus === 'Pending'
-  ).length
-
-  const criticalRepairs = issues.filter(
-    issue => issue.priority === 'Critical'
-  ).length
-
-  const completedRepairs = issues.filter(
-    issue => issue.workOrderStatus === 'Completed'
-  ).length
-
-  const recoveryRate = totalIssues > 0
-    ? ((completedRepairs / totalIssues) * 100).toFixed(1)
-    : '0.0'
+  const pendingReviews = issues.filter(issue => issue.reviewStatus === 'Pending').length
+  const criticalRepairs = issues.filter(issue => issue.priority === 'Critical').length
+  const completedRepairs = issues.filter(issue => issue.workOrderStatus === 'Completed').length
+  const recoveryRate = totalIssues ? (completedRepairs / totalIssues * 100).toFixed(1) : '0.0'
 
   // Update an issue's review status
   function updateReviewStatus(id, newStatus) {
@@ -223,6 +313,14 @@ function App() {
           </div>
 
           <div className="dashboard-filters">
+            <button
+              className="export-button"
+              aria-expanded={filterOpen}
+              aria-controls="advanced-filters"
+              onClick={() => setFilterOpen(previous => !previous)}
+            >
+              More filters
+            </button>
             <select
               aria-label="Filter by severity"
               value={severity}
@@ -236,6 +334,60 @@ function App() {
             </select>
           </div>
         </div>
+
+        {filterOpen && (
+          <section id="advanced-filters" className="advanced-filters" aria-label="Advanced issue filters">
+            {[
+              ['type', 'Issue type', 'type'],
+              ['reviewStatus', 'Review status', 'reviewStatus'],
+              ['workOrderStatus', 'Work order', 'workOrderStatus'],
+              ['neighborhood', 'Neighborhood', 'neighborhood']
+            ].map(([key, label, property]) => (
+              <label key={key}>
+                {label}
+                <select
+                  value={filters[key][0] ?? ''}
+                  onChange={event => setFilters(previous => ({
+                    ...previous,
+                    [key]: event.target.value ? [event.target.value] : []
+                  }))}
+                >
+                  <option value="">All</option>
+                  {[...new Set(issues.map(issue => issue[property]))].map(value => (
+                    <option key={value} value={value}>{value}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            {[
+              ['latitude', 'Latitude', -90, 90],
+              ['longitude', 'Longitude', -180, 180],
+              ['radius', 'Radius (km)', 0.1, undefined]
+            ].map(([key, label, min, max]) => (
+              <label key={key}>
+                {label}
+                <input
+                  type="number"
+                  step="any"
+                  min={min}
+                  max={max}
+                  value={coordinateFilter[key]}
+                  onChange={event => setCoordinateFilter(previous => ({
+                    ...previous, [key]: event.target.value
+                  }))}
+                />
+              </label>
+            ))}
+            <button onClick={() => {
+              setFilters({ severity: [], type: [], reviewStatus: [], workOrderStatus: [], neighborhood: [] })
+              setCoordinateFilter({ latitude: '', longitude: '', radius: 2 })
+              setSeverity('all')
+              setFilter('all')
+              setSearch('')
+            }}>Reset filters</button>
+            <p>Enter both coordinates and a positive radius to search nearby issues.</p>
+          </section>
+        )}
 
         {/* STATISTICS */}
         <div className="stats-grid">
