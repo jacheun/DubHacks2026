@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -6,8 +6,6 @@ const priorityColors = { Critical: '#c44735', High: '#d68b32', Medium: '#728a5c'
 
 function MapControls({ issues, focusedIssue }) {
   const map = useMap()
-  const [locationStatus, setLocationStatus] = useState('')
-  const [userLocation, setUserLocation] = useState(null)
 
   useEffect(() => {
     const observer = new ResizeObserver(() => {
@@ -16,14 +14,6 @@ function MapControls({ issues, focusedIssue }) {
     observer.observe(map.getContainer())
     return () => observer.disconnect()
   }, [map])
-
-  function fitIssues() {
-    if (issues.length) {
-      map.fitBounds(issues.map(issue => [issue.latitude, issue.longitude]), {
-        padding: [45, 45], maxZoom: 15,
-      })
-    }
-  }
 
   const issueCoordinates = JSON.stringify(issues.map(issue => [issue.latitude, issue.longitude]))
 
@@ -42,37 +32,11 @@ function MapControls({ issues, focusedIssue }) {
     }
   }, [focusedIssue, map])
 
-  function locateUser() {
-    if (!navigator.geolocation) {
-      setLocationStatus('Your browser does not support location access.')
-      return
-    }
-    setLocationStatus('Finding your location…')
-    navigator.geolocation.getCurrentPosition(position => {
-      const coordinates = [position.coords.latitude, position.coords.longitude]
-      setUserLocation(coordinates)
-      map.flyTo(coordinates, 14)
-      setLocationStatus('Showing your location.')
-    }, () => setLocationStatus('Location unavailable. Check your browser location permissions.'), {
-      enableHighAccuracy: true, timeout: 10000,
-    })
-  }
-
   return (
-    <>
-      <div className="issue-map-actions" onPointerDown={event => event.stopPropagation()}
-        onDoubleClick={event => event.stopPropagation()}>
-        <button type="button" onClick={fitIssues} disabled={!issues.length}>Show all issues</button>
-        <button type="button" onClick={locateUser}>My location</button>
-        <span role="status">{locationStatus || (issues.length ? 'Drag to explore · Scroll to zoom · Select a marker' : 'No issues match your filters.')}</span>
-      </div>
-      {userLocation && (
-        <CircleMarker center={userLocation} radius={8}
-          pathOptions={{ color: '#fff', weight: 3, fillColor: '#2877df', fillOpacity: 1 }}>
-          <Tooltip>Your location</Tooltip>
-        </CircleMarker>
-      )}
-    </>
+    <div className="issue-map-actions" onPointerDown={event => event.stopPropagation()}
+      onDoubleClick={event => event.stopPropagation()}>
+      <span role="status">{issues.length ? 'Drag to explore · Scroll to zoom · Select a marker' : 'No issues match your filters.'}</span>
+    </div>
   )
 }
 
