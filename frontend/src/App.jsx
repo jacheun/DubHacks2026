@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import IssueMap from './components/IssueMap'
 import './App.css'
 
 const initialIssues = [
@@ -267,23 +268,23 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-theme="sage">
 
       {/* NAVIGATION */}
       <nav className="navbar">
         <div className="brand">
           <h2>GroundWorkAI</h2>
-          <span>INFRASTRUCTURE INTELLIGENCE</span>
+
         </div>
 
+        <div className="sidebar-links">
+          <a href="#dashboard">Overview <span aria-hidden="true">↗</span></a>
+          <a href="#inspection-map">Inspection map</a>
+          <a href="#priorities">Repair priorities</a>
+          <a href="#issues">Issue reports</a>
+        </div>
         <div className="nav-actions">
-          <input
-            type="search"
-            aria-label="Search roads and issues"
-            placeholder="Search a road or issue..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+
 
           <button
             className="export-button"
@@ -304,7 +305,7 @@ function App() {
               OPERATIONS · SEATTLE, WA
             </p>
 
-            <h1>Road condition overview</h1>
+            <h1>Road Condition Overview</h1>
 
             <p className="subtitle">
               AI-powered road and sidewalk inspection
@@ -313,14 +314,28 @@ function App() {
           </div>
 
           <div className="dashboard-filters">
+          <input
+            type="search"
+            aria-label="Search roads and issues"
+            placeholder="Search a road or issue..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
             <button
               className="export-button"
               aria-expanded={filterOpen}
               aria-controls="advanced-filters"
               onClick={() => setFilterOpen(previous => !previous)}
             >
-              More filters
+              Filters
             </button>
+          </div>
+        </div>
+
+        {filterOpen && (
+          <section id="advanced-filters" className="advanced-filters" aria-label="Advanced issue filters">
+            <label>
+              Severity
             <select
               aria-label="Filter by severity"
               value={severity}
@@ -332,11 +347,7 @@ function App() {
               <option value="Medium">Medium</option>
               <option value="Low">Low</option>
             </select>
-          </div>
-        </div>
-
-        {filterOpen && (
-          <section id="advanced-filters" className="advanced-filters" aria-label="Advanced issue filters">
+            </label>
             {[
               ['type', 'Issue type', 'type'],
               ['reviewStatus', 'Review status', 'reviewStatus'],
@@ -422,11 +433,11 @@ function App() {
         <div className="main-grid">
 
           {/* MAP */}
-          <section className="map-container">
+          <section id="inspection-map" className="map-container">
 
             <div className="map-overlay">
               <span className="map-label">
-                ● DEMO MAP
+                ● SEATTLE ISSUE MAP
               </span>
 
               <div className="map-controls">
@@ -443,34 +454,24 @@ function App() {
               </div>
             </div>
 
-            <div className={`map-area ${mapView.toLowerCase()}`}>
+            
+          {/* INTERACTIVE MAP */}
+            <IssueMap
+              issues={filteredIssues}
+              onSelectIssue={setSelectedIssue}
+              view={mapView}
+            />
 
-              {filteredIssues.map(issue => (
-                <button
-                  key={issue.id}
-                  className={`map-marker ${issue.priority.toLowerCase()}`}
-                  style={{
-                    left: `${issue.x}%`,
-                    top: `${issue.y}%`
-                  }}
-                  onClick={() => setSelectedIssue(issue)}
-                  title={issue.location}
-                >
-                  {issue.id}
-                </button>
-              ))}
-
-            </div>
 
             <div className="map-footer">
-              <span>Illustrative map · Not georeferenced</span>
+              <span>Issue locations · Seattle, WA</span>
               <span>{filteredIssues.length} visible issues</span>
             </div>
 
           </section>
 
           {/* REPAIR PRIORITY PANEL */}
-          <aside className="priority-panel">
+          <aside id="priorities" className="priority-panel">
 
             <div className="priority-header">
               <h2>Repair priority</h2>

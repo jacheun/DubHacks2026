@@ -7,5 +7,9 @@
     "lint": "npm --prefix frontend run lint",
     "preview": "npm --prefix frontend run preview",
     "postinstall": "npm --prefix frontend ci"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^5.0.0"
   }
 }
