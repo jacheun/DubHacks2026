@@ -102,6 +102,37 @@ function calculateDistance(latitude, longitude, issueLatitude, issueLongitude) {
 }
 
 function App() {
+  const [activeSection, setActiveSection] = useState('inspection-map')
+
+  useEffect(() => {
+    const sections = ['inspection-map', 'priorities', 'issues']
+    let frame = 0
+    function updateSection() {
+      const threshold = window.innerHeight * 0.3
+      let current = sections[0]
+      for (const id of sections) {
+        const section = document.getElementById(id)
+        if (section && section.getBoundingClientRect().top <= threshold) current = id
+      }
+      if (window.scrollY > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) {
+        current = sections[sections.length - 1]
+      }
+      setActiveSection(current)
+    }
+    function onScroll() {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(updateSection)
+    }
+    updateSection()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [])
+
   const [issues, setIssues] = useState(initialIssues)
   const [filterOpen, setFilterOpen] = useState(false)
   const [filters, setFilters] = useState(createFilters)
@@ -225,9 +256,9 @@ function App() {
         </div>
 
         <div className="sidebar-links">
-          <a href="#inspection-map">Inspection Map</a>
-          <a href="#priorities">Repair Priorities</a>
-          <a href="#issues">Issue Reports</a>
+          <a href="#inspection-map" aria-current={activeSection === 'inspection-map' ? 'location' : undefined}>Inspection Map</a>
+          <a href="#priorities" aria-current={activeSection === 'priorities' ? 'location' : undefined}>Repair Priorities</a>
+          <a href="#issues" aria-current={activeSection === 'issues' ? 'location' : undefined}>Issue Reports</a>
         </div>
         <div className="nav-actions">
 

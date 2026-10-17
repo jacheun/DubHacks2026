@@ -205,7 +205,7 @@ h1, .priority-header h2, .section-header h2, .workspace-summary h3 {
   font-size: 13px;
   color: #69725f;
 }
-.sidebar-links a:first-child { background: #e1e8d7; color: #405339; font-weight: 700; }
+.sidebar-links a[aria-current="location"] { background: #e1e8d7; color: #405339; font-weight: 700; }
 .sidebar-links a:hover { background: #e6ebdd; }
 .sidebar-links a:focus-visible { outline: 3px solid var(--sage); outline-offset: 2px; }
 .nav-actions { margin-top: auto; display: grid; gap: 12px; }
