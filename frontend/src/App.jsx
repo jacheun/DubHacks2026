@@ -215,7 +215,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-theme="sage">
 
       {/* NAVIGATION */}
       <nav className="navbar">

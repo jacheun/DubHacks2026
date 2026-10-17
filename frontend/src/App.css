@@ -37,9 +37,9 @@ h1 { font-size: clamp(28px, 3vw, 40px); line-height: 1.2; letter-spacing: -1.3px
 .stat-card:nth-child(3) h2 { color: #b35b3c; }
 .main-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: 22px; align-items: stretch; }
 .map-container, .priority-panel, .issues-section { background: #fff; border: 1px solid #e2e8dc; border-radius: 10px; overflow: hidden; }
-.map-container { display: flex; flex-direction: column; }
+.map-container { display: flex; flex-direction: column; align-self: start; }
 .map-overlay { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #e2e8dc; }
-.issue-map { height: 455px; width: 100%; z-index: 0; }
+.issue-map { height: 455px; width: 100%; flex-shrink: 0; z-index: 0; }
 .issue-map-actions { position: absolute; top: 12px; right: 12px; z-index: 1000; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: min(75%, 340px); }
 .issue-map-actions button, .issue-map-popup button { background: #fff; color: #214a32; border: 1px solid #c4d0c3; border-radius: 5px; padding: 8px 10px; cursor: pointer; }
 .issue-map-actions button:disabled { opacity: .6; cursor: default; }
@@ -292,6 +292,7 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
   .dashboard-filters input[type="search"] { flex: 1; min-width: 140px; }
 }
 
+<<<<<<< HEAD
 /* Search and catalog filters share the dashboard's sage palette. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .results-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
@@ -353,3 +354,26 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
   .filters-open .results-content { grid-row: 1; }
   .filters-open .filter-sidebar { grid-row: 2; }
 }
+=======
+/* Keep desktop navigation in view while the dashboard scrolls. */
+@media (min-width: 761px) {
+  .app { overflow: clip; }
+  .navbar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+  }
+}
+
+/* Stack the inspection map and repair priorities across the dashboard. */
+.main-grid { grid-template-columns: minmax(0, 1fr); }
+.main-grid > .map-container,
+.main-grid > .priority-panel { width: 100%; min-width: 0; }
+.priority-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; }
+@media (max-width: 760px) {
+  .priority-list { grid-template-columns: minmax(0, 1fr); }
+}
+
+>>>>>>> 091b6b39abdae3689243cc164a454a2ce757d333

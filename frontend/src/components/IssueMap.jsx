@@ -10,7 +10,9 @@ function MapControls({ issues, focusedIssue }) {
   const [userLocation, setUserLocation] = useState(null)
 
   useEffect(() => {
-    const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }))
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize({ pan: false })
+    })
     observer.observe(map.getContainer())
     return () => observer.disconnect()
   }, [map])

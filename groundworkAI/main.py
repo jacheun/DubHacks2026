@@ -12,7 +12,7 @@ if not TOKEN:
     raise ValueError("Mapillary token not found in .env!")
 
 # Your actual Mapillary image ID
-IMAGE_ID = "1302137754488299"
+IMAGE_ID = "382364190068216"
 
 url = f"https://graph.mapillary.com/{IMAGE_ID}"
 
