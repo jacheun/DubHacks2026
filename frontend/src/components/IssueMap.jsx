@@ -9,6 +9,14 @@ function MapControls({ issues }) {
   const [locationStatus, setLocationStatus] = useState('')
   const [userLocation, setUserLocation] = useState(null)
 
+  useEffect(() => {
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize({ pan: false })
+    })
+    observer.observe(map.getContainer())
+    return () => observer.disconnect()
+  }, [map])
+
   function fitIssues() {
     if (issues.length) {
       map.fitBounds(issues.map(issue => [issue.latitude, issue.longitude]), {

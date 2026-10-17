@@ -268,7 +268,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className="app" data-theme="sage">
 
       {/* NAVIGATION */}
       <nav className="navbar">
@@ -305,7 +305,7 @@ function App() {
               OPERATIONS · SEATTLE, WA
             </p>
 
-            <h1>Road condition overview</h1>
+            <h1>Road Condition Overview</h1>
 
             <p className="subtitle">
               AI-powered road and sidewalk inspection
