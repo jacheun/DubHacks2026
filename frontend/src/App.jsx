@@ -276,14 +276,14 @@ function App() {
           <span>INFRASTRUCTURE INTELLIGENCE</span>
         </div>
 
+        <div className="sidebar-links">
+          <a href="#dashboard">Overview <span aria-hidden="true">↗</span></a>
+          <a href="#inspection-map">Inspection map</a>
+          <a href="#priorities">Repair priorities</a>
+          <a href="#issues">Issue reports</a>
+        </div>
         <div className="nav-actions">
-          <input
-            type="search"
-            aria-label="Search roads and issues"
-            placeholder="Search a road or issue..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+
 
           <button
             className="export-button"
@@ -313,14 +313,28 @@ function App() {
           </div>
 
           <div className="dashboard-filters">
+          <input
+            type="search"
+            aria-label="Search roads and issues"
+            placeholder="Search a road or issue..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
             <button
               className="export-button"
               aria-expanded={filterOpen}
               aria-controls="advanced-filters"
               onClick={() => setFilterOpen(previous => !previous)}
             >
-              More filters
+              Filters
             </button>
+          </div>
+        </div>
+
+        {filterOpen && (
+          <section id="advanced-filters" className="advanced-filters" aria-label="Advanced issue filters">
+            <label>
+              Severity
             <select
               aria-label="Filter by severity"
               value={severity}
@@ -332,11 +346,7 @@ function App() {
               <option value="Medium">Medium</option>
               <option value="Low">Low</option>
             </select>
-          </div>
-        </div>
-
-        {filterOpen && (
-          <section id="advanced-filters" className="advanced-filters" aria-label="Advanced issue filters">
+            </label>
             {[
               ['type', 'Issue type', 'type'],
               ['reviewStatus', 'Review status', 'reviewStatus'],
@@ -422,7 +432,7 @@ function App() {
         <div className="main-grid">
 
           {/* MAP */}
-          <section className="map-container">
+          <section id="inspection-map" className="map-container">
 
             <div className="map-overlay">
               <span className="map-label">
@@ -470,7 +480,7 @@ function App() {
           </section>
 
           {/* REPAIR PRIORITY PANEL */}
-          <aside className="priority-panel">
+          <aside id="priorities" className="priority-panel">
 
             <div className="priority-header">
               <h2>Repair priority</h2>
