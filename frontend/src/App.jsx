@@ -225,7 +225,6 @@ function App() {
         </div>
 
         <div className="sidebar-links">
-          <a href="#dashboard">Overview <span aria-hidden="true">↗</span></a>
           <a href="#inspection-map">Inspection Map</a>
           <a href="#priorities">Repair Priorities</a>
           <a href="#issues">Issue Reports</a>
