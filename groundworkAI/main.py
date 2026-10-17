@@ -1,37 +1,67 @@
 import os
 import requests
 from dotenv import load_dotenv
+from PIL import Image
+from io import BytesIO
 
 load_dotenv()
 
 TOKEN = os.getenv("MAPILLARY_TOKEN")
 
 if not TOKEN:
-    raise ValueError("Mapillary token not found!")
+    raise ValueError("Mapillary token not found in .env!")
 
-url = "https://graph.mapillary.com/images"
+# Your actual Mapillary image ID
+IMAGE_ID = "1302137754488299"
+
+url = f"https://graph.mapillary.com/{IMAGE_ID}"
 
 params = {
-    "bbox": "-122.338,47.608,-122.332,47.613",
-    "fields": "id,computed_geometry,captured_at,thumb_1024_url",
-    "limit": 10
+    "fields": "id,computed_geometry,captured_at,thumb_1024_url"
 }
 
-response = requests.get(
-    url,
-    params=params,
-    headers={"Authorization": f"OAuth {TOKEN}"},
-    timeout=30
-)
+print("GroundWorkAI: Connecting to Mapillary...")
 
-response.raise_for_status()
+try:
+    response = requests.get(
+        url,
+        params=params,
+        headers={"Authorization": f"OAuth {TOKEN}"},
+        timeout=30
+    )
 
-images = response.json().get("data", [])
+    print("Status code:", response.status_code)
 
-print(f"GroundWorkAI found {len(images)} images!")
+    if response.ok:
+        data = response.json()
 
-for image in images:
-    print("Image ID:", image["id"])
-    print("Location:", image.get("computed_geometry"))
-    print("Image URL:", image.get("thumb_1024_url"))
-    print("----------------------")
+        print("\nImage found!")
+        print("Image ID:", data.get("id"))
+        print("Coordinates:", data.get("computed_geometry"))
+        print("Captured at:", data.get("captured_at"))
+
+        image_url = data.get("thumb_1024_url")
+
+        if image_url:
+            image_response = requests.get(
+                image_url,
+                timeout=30
+            )
+            image_response.raise_for_status()
+
+            image = Image.open(
+                BytesIO(image_response.content)
+            )
+
+            image.show()
+
+            print("\nImage loaded successfully!")
+        else:
+            print("No thumbnail URL returned.")
+
+    else:
+        print("Mapillary API error:")
+        print(response.text[:1000])
+
+except requests.exceptions.RequestException as e:
+    print("Request failed:", e)
