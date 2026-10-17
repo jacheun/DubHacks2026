@@ -274,7 +274,7 @@ function App() {
       <nav className="navbar">
         <div className="brand">
           <h2>GroundWorkAI</h2>
-          <span>INFRASTRUCTURE INTELLIGENCE</span>
+
         </div>
 
         <div className="sidebar-links">
