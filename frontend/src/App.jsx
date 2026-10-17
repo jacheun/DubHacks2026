@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import IssueMap from './components/IssueMap'
 import './App.css'
 
 const initialIssues = [
@@ -436,7 +437,7 @@ function App() {
 
             <div className="map-overlay">
               <span className="map-label">
-                ● DEMO MAP
+                ● SEATTLE ISSUE MAP
               </span>
 
               <div className="map-controls">
@@ -453,27 +454,17 @@ function App() {
               </div>
             </div>
 
-            <div className={`map-area ${mapView.toLowerCase()}`}>
+            
+          {/* INTERACTIVE MAP */}
+            <IssueMap
+              issues={filteredIssues}
+              onSelectIssue={setSelectedIssue}
+              view={mapView}
+            />
 
-              {filteredIssues.map(issue => (
-                <button
-                  key={issue.id}
-                  className={`map-marker ${issue.priority.toLowerCase()}`}
-                  style={{
-                    left: `${issue.x}%`,
-                    top: `${issue.y}%`
-                  }}
-                  onClick={() => setSelectedIssue(issue)}
-                  title={issue.location}
-                >
-                  {issue.id}
-                </button>
-              ))}
-
-            </div>
 
             <div className="map-footer">
-              <span>Illustrative map · Not georeferenced</span>
+              <span>Issue locations · Seattle, WA</span>
               <span>{filteredIssues.length} visible issues</span>
             </div>
 
