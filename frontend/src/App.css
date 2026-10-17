@@ -38,6 +38,13 @@ h1 { font-size: clamp(28px, 3vw, 40px); line-height: 1.2; letter-spacing: -1.3px
 .main-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap: 22px; align-items: stretch; }
 .map-container, .priority-panel, .issues-section { background: #fff; border: 1px solid #dce4d9; border-radius: 10px; overflow: hidden; }
 .map-container { display: flex; flex-direction: column; }
+.issue-map { height: 455px; width: 100%; z-index: 0; }
+.issue-map-actions { position: absolute; top: 12px; right: 12px; z-index: 1000; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: min(75%, 340px); }
+.issue-map-actions button, .issue-map-popup button { background: #fff; color: #214a32; border: 1px solid #c4d0c3; border-radius: 5px; padding: 8px 10px; cursor: pointer; }
+.issue-map-actions button:disabled { opacity: .6; cursor: default; }
+.issue-map-actions span { background: #fffffff2; border-radius: 4px; padding: 5px 8px; font-size: 11px; }
+.issue-map-popup { min-width: 180px; }
+.issue-map-popup button { background: #214a32; color: white; }
 .map-overlay { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #dce4d9; }
 .map-label { font-size: 9px; font-weight: 700; letter-spacing: 1px; color: #59705d; }
 .map-controls { display: flex; padding: 3px; background: #edf1eb; border-radius: 6px; }
