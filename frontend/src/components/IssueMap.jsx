@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
 const priorityColors = { Critical: '#c44735', High: '#d68b32', Medium: '#728a5c' }
 
-function MapControls({ issues }) {
+function MapControls({ issues, focusedIssue }) {
   const map = useMap()
-  const [locationStatus, setLocationStatus] = useState('')
-  const [userLocation, setUserLocation] = useState(null)
 
   useEffect(() => {
     const observer = new ResizeObserver(() => {
@@ -17,57 +15,32 @@ function MapControls({ issues }) {
     return () => observer.disconnect()
   }, [map])
 
-  function fitIssues() {
-    if (issues.length) {
-      map.fitBounds(issues.map(issue => [issue.latitude, issue.longitude]), {
-        padding: [45, 45], maxZoom: 15,
-      })
-    }
-  }
+  const issueCoordinates = JSON.stringify(issues.map(issue => [issue.latitude, issue.longitude]))
 
   useEffect(() => {
-    if (issues.length) {
-      map.fitBounds(issues.map(issue => [issue.latitude, issue.longitude]), {
+    const coordinates = JSON.parse(issueCoordinates)
+    if (coordinates.length) {
+      map.fitBounds(coordinates, {
         padding: [45, 45], maxZoom: 15,
       })
     }
-  }, [issues, map])
+  }, [issueCoordinates, map])
 
-  function locateUser() {
-    if (!navigator.geolocation) {
-      setLocationStatus('Your browser does not support location access.')
-      return
+  useEffect(() => {
+    if (focusedIssue) {
+      map.flyTo([focusedIssue.latitude, focusedIssue.longitude], 17, { duration: 1 })
     }
-    setLocationStatus('Finding your location…')
-    navigator.geolocation.getCurrentPosition(position => {
-      const coordinates = [position.coords.latitude, position.coords.longitude]
-      setUserLocation(coordinates)
-      map.flyTo(coordinates, 14)
-      setLocationStatus('Showing your location.')
-    }, () => setLocationStatus('Location unavailable. Check your browser location permissions.'), {
-      enableHighAccuracy: true, timeout: 10000,
-    })
-  }
+  }, [focusedIssue, map])
 
   return (
-    <>
-      <div className="issue-map-actions" onPointerDown={event => event.stopPropagation()}
-        onDoubleClick={event => event.stopPropagation()}>
-        <button type="button" onClick={fitIssues} disabled={!issues.length}>Show all issues</button>
-        <button type="button" onClick={locateUser}>My location</button>
-        <span role="status">{locationStatus || (issues.length ? 'Drag to explore · Scroll to zoom · Select a marker' : 'No issues match your filters.')}</span>
-      </div>
-      {userLocation && (
-        <CircleMarker center={userLocation} radius={8}
-          pathOptions={{ color: '#fff', weight: 3, fillColor: '#2877df', fillOpacity: 1 }}>
-          <Tooltip>Your location</Tooltip>
-        </CircleMarker>
-      )}
-    </>
+    <div className="issue-map-actions" onPointerDown={event => event.stopPropagation()}
+      onDoubleClick={event => event.stopPropagation()}>
+      <span role="status">{issues.length ? 'Drag to explore · Scroll to zoom · Select a marker' : 'No issues match your filters.'}</span>
+    </div>
   )
 }
 
-export default function IssueMap({ issues, onSelectIssue, view = 'Road' }) {
+export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectIssue, view = 'Road' }) {
   const satellite = view === 'Satellite'
 
   return (
@@ -86,16 +59,17 @@ export default function IssueMap({ issues, onSelectIssue, view = 'Road' }) {
           ? 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
           : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
       />
-      <MapControls issues={issues} />
+      <MapControls issues={issues} focusedIssue={focusedIssue} />
       {issues.map(issue => (
         <CircleMarker
           key={issue.id}
           center={[issue.latitude, issue.longitude]}
-          radius={view === 'Risk' ? 8 + issue.priorityScore / 6 : 10}
+          radius={10}
+          eventHandlers={{ click: () => onFocusIssue(issue) }}
           pathOptions={{
             color: '#fff', weight: 2,
             fillColor: priorityColors[issue.priority] ?? '#728a5c',
-            fillOpacity: view === 'Risk' ? 0.55 : 0.9,
+            fillOpacity: 0.9,
           }}
         >
           <Tooltip>{issue.location} · {issue.type} · {issue.priority}</Tooltip>

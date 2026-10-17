@@ -73,6 +73,24 @@ const initialIssues = [
   }
 ]
 
+const filterCategories = [
+  { key: 'neighborhood', label: 'Location', property: 'neighborhood' },
+  { key: 'priority', label: 'Repair Priority', property: 'priority' },
+  { key: 'type', label: 'Issue Type', property: 'type' },
+  { key: 'reviewStatus', label: 'Review Status', property: 'reviewStatus' },
+  { key: 'workOrderStatus', label: 'Work Order Status', property: 'workOrderStatus' },
+]
+
+function createFilters() {
+  return { neighborhood: [], priority: [], type: [], reviewStatus: [], workOrderStatus: [],
+    coordinates: { latitude: '', longitude: '', radius: '2' } }
+}
+
+function searchValues(issue) {
+  return [issue.location, issue.neighborhood, issue.type, String(issue.id),
+    `ISSUE-${String(issue.id).padStart(3, '0')}`, issue.reviewId, issue.workOrderId].filter(Boolean)
+}
+
 function calculateDistance(latitude, longitude, issueLatitude, issueLongitude) {
   const radians = value => value * Math.PI / 180
   const latitudeDifference = radians(issueLatitude - latitude)
@@ -85,25 +103,12 @@ function calculateDistance(latitude, longitude, issueLatitude, issueLongitude) {
 
 function App() {
   const [issues, setIssues] = useState(initialIssues)
-  const [filter, setFilter] = useState('all')
   const [filterOpen, setFilterOpen] = useState(false)
-  const [filters, setFilters] = useState({
-    severity:[],
-    type: [],
-    reviewStatus: [],
-    workOrderStatus: [],
-    neighborhood: []
-  })
-
-  // Coordinate search inputs
-  const [coordinateFilter, setCoordinateFilter] = useState({
-    latitude: '',
-    longitude: '',
-    radius: 2
-  })
-  const [severity, setSeverity] = useState('all')
+  const [filters, setFilters] = useState(createFilters)
   const [search, setSearch] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [selectedIssue, setSelectedIssue] = useState(null)
+  const [focusedIssue, setFocusedIssue] = useState(null)
   const [mapView, setMapView] = useState('Satellite')
   const dialogRef = useRef(null)
 
@@ -113,94 +118,36 @@ function App() {
     }
   }, [selectedIssue])
 
-  // Filter Infrastructure Issues
-  const filteredIssues = issues.filter((issue) => {
+  const coordinateFilter = filters.coordinates
+  const hasCoordinates = coordinateFilter.latitude.trim() !== '' || coordinateFilter.longitude.trim() !== ''
+  const validCoordinates = coordinateFilter.latitude.trim() !== '' && coordinateFilter.longitude.trim() !== '' &&
+    Number.isFinite(Number(coordinateFilter.latitude)) && Math.abs(Number(coordinateFilter.latitude)) <= 90 &&
+    Number.isFinite(Number(coordinateFilter.longitude)) && Math.abs(Number(coordinateFilter.longitude)) <= 180 &&
+    Number.isFinite(Number(coordinateFilter.radius)) && Number(coordinateFilter.radius) > 0
+  const coordinateError = hasCoordinates && !validCoordinates
+  const activeFilterCount = filterCategories.reduce((count, { key }) => count + filters[key].length, 0) + Number(hasCoordinates)
+  const query = search.trim().toLowerCase()
+  const filteredIssues = issues.filter(issue =>
+    filterCategories.every(({ key, property }) => !filters[key].length || filters[key].includes(issue[property])) &&
+    (!hasCoordinates || (validCoordinates && calculateDistance(
+      Number(coordinateFilter.latitude), Number(coordinateFilter.longitude), issue.latitude, issue.longitude
+    ) <= Number(coordinateFilter.radius))) &&
+    searchValues(issue).some(value => value.toLowerCase().includes(query))
+  )
+  const suggestions = query ? [...new Set(filteredIssues.flatMap(searchValues))]
+    .filter(value => value.toLowerCase().includes(query)).slice(0, 8) : []
 
-    // Severity
-    const matchesSeverity =
-      (severity === 'all' || issue.priority === severity) &&
-      (filters.severity.length === 0 || filters.severity.includes(issue.priority))
+  function toggleFilter(key, value) {
+    setFilters(previous => ({ ...previous, [key]: previous[key].includes(value)
+      ? previous[key].filter(item => item !== value) : [...previous[key], value] }))
+  }
 
-    // Infrastructure type
-    const matchesType =
-      filters.type.length === 0 ||
-      filters.type.includes(issue.type)
-
-    // Review status
-    const matchesReview =
-      (filter === 'all' || issue.reviewStatus === filter) &&
-      (filters.reviewStatus.length === 0 || filters.reviewStatus.includes(issue.reviewStatus))
-
-    // Work order status
-    const matchesWorkOrder =
-      filters.workOrderStatus.length === 0 ||
-      filters.workOrderStatus.includes(issue.workOrderStatus)
-
-    // Neighborhood
-    const matchesNeighborhood =
-      filters.neighborhood.length === 0 ||
-      filters.neighborhood.includes(issue.neighborhood)
-
-    // Search bar
-    const matchesSearch =
-      issue.location.toLowerCase().includes(search.toLowerCase()) ||
-      issue.type.toLowerCase().includes(search.toLowerCase()) ||
-      issue.neighborhood.toLowerCase().includes(search.toLowerCase())
-
-    // Coordinate radius filter
-    let matchesCoordinates = true
-
-    const hasLatitude = coordinateFilter.latitude.trim() !== ''
-    const hasLongitude = coordinateFilter.longitude.trim() !== ''
-
-    if (hasLatitude && hasLongitude) {
-      const lat = Number(coordinateFilter.latitude)
-      const lon = Number(coordinateFilter.longitude)
-      const radius = Number(coordinateFilter.radius)
-
-      const validCoordinates =
-        Number.isFinite(lat) &&
-        Number.isFinite(lon) &&
-        lat >= -90 &&
-        lat <= 90 &&
-        lon >= -180 &&
-        lon <= 180 &&
-        Number.isFinite(radius) &&
-        radius > 0
-
-      if (validCoordinates) {
-        const distance = calculateDistance(
-          lat,
-          lon,
-          issue.latitude,
-          issue.longitude
-        )
-
-        matchesCoordinates = distance <= radius
-      } else {
-        matchesCoordinates = false
-      }
-    } else if (hasLatitude || hasLongitude) {
-      matchesCoordinates = false
-    }
-
-    return (
-      matchesSeverity &&
-      matchesType &&
-      matchesReview &&
-      matchesWorkOrder &&
-      matchesNeighborhood &&
-      matchesSearch &&
-      matchesCoordinates
-    )
-  })
-
-
-  const totalIssues = issues.length
-  const pendingReviews = issues.filter(issue => issue.reviewStatus === 'Pending').length
-  const criticalRepairs = issues.filter(issue => issue.priority === 'Critical').length
-  const completedRepairs = issues.filter(issue => issue.workOrderStatus === 'Completed').length
-  const recoveryRate = totalIssues ? (completedRepairs / totalIssues * 100).toFixed(1) : '0.0'
+  function focusOnIssue(issue) {
+    setFocusedIssue({ ...issue })
+    document.getElementById('inspection-map')?.scrollIntoView({
+      behavior: 'smooth', block: 'center'
+    })
+  }
 
   // Update an issue's review status
   function updateReviewStatus(id, newStatus) {
@@ -278,10 +225,9 @@ function App() {
         </div>
 
         <div className="sidebar-links">
-          <a href="#dashboard">Overview <span aria-hidden="true">↗</span></a>
-          <a href="#inspection-map">Inspection map</a>
-          <a href="#priorities">Repair priorities</a>
-          <a href="#issues">Issue reports</a>
+          <a href="#inspection-map">Inspection Map</a>
+          <a href="#priorities">Repair Priorities</a>
+          <a href="#issues">Issue Reports</a>
         </div>
         <div className="nav-actions">
 
@@ -308,127 +254,92 @@ function App() {
             <h1>Road Condition Overview</h1>
 
             <p className="subtitle">
-              AI-powered road and sidewalk inspection
-              within Seattle city limits.
+              AI-Powered Road and Sidewalk Inspection
+              Within Seattle City Limits
             </p>
           </div>
 
           <div className="dashboard-filters">
-          <input
-            type="search"
-            aria-label="Search roads and issues"
-            placeholder="Search a road or issue..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-            <button
-              className="export-button"
-              aria-expanded={filterOpen}
-              aria-controls="advanced-filters"
-              onClick={() => setFilterOpen(previous => !previous)}
-            >
-              Filters
+            <div className="universal-search" onBlur={event => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setSearchOpen(false)
+            }}>
+              <label className="sr-only" htmlFor="issue-search">Search roads, neighborhoods, types, or IDs</label>
+              <div className="search-input-wrap">
+                <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="10.5" cy="10.5" r="6.5" />
+                  <path d="m16 16 4.5 4.5" />
+                </svg>
+                <input id="issue-search" type="search" placeholder="Search roads, places, types, IDs…"
+                  value={search} autoComplete="off" aria-controls="search-suggestions"
+                  onFocus={() => setSearchOpen(true)}
+                  onKeyDown={event => { if (event.key === 'Escape') setSearchOpen(false) }}
+                  onChange={event => { setSearch(event.target.value); setSearchOpen(true) }} />
+                {search && <button className="clear-search" aria-label="Clear search" onClick={() => {
+                  setSearch(''); document.getElementById('issue-search').focus()
+                }}>×</button>}
+              </div>
+              {searchOpen && query && (
+                <div id="search-suggestions" className="search-suggestions" aria-label="Matching search suggestions">
+                  {suggestions.length ? <ul>{suggestions.map(value => (
+                    <li key={value}><button onClick={() => { setSearch(value); setSearchOpen(false) }}>{value}</button></li>
+                  ))}</ul> : <p>No matches with the current filters.</p>}
+                </div>
+              )}
+            </div>
+            <button className="export-button" aria-expanded={filterOpen} aria-controls="issue-filters"
+              onClick={() => setFilterOpen(previous => !previous)}>
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
             </button>
           </div>
         </div>
 
-        {filterOpen && (
-          <section id="advanced-filters" className="advanced-filters" aria-label="Advanced issue filters">
-            <label>
-              Severity
-            <select
-              aria-label="Filter by severity"
-              value={severity}
-              onChange={(e) => setSeverity(e.target.value)}
-            >
-              <option value="all">All Severity</option>
-              <option value="Critical">Critical</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
-            </label>
-            {[
-              ['type', 'Issue type', 'type'],
-              ['reviewStatus', 'Review status', 'reviewStatus'],
-              ['workOrderStatus', 'Work order', 'workOrderStatus'],
-              ['neighborhood', 'Neighborhood', 'neighborhood']
-            ].map(([key, label, property]) => (
-              <label key={key}>
-                {label}
-                <select
-                  value={filters[key][0] ?? ''}
-                  onChange={event => setFilters(previous => ({
-                    ...previous,
-                    [key]: event.target.value ? [event.target.value] : []
-                  }))}
-                >
-                  <option value="">All</option>
-                  {[...new Set(issues.map(issue => issue[property]))].map(value => (
-                    <option key={value} value={value}>{value}</option>
-                  ))}
-                </select>
-              </label>
-            ))}
-            {[
-              ['latitude', 'Latitude', -90, 90],
-              ['longitude', 'Longitude', -180, 180],
-              ['radius', 'Radius (km)', 0.1, undefined]
-            ].map(([key, label, min, max]) => (
-              <label key={key}>
-                {label}
-                <input
-                  type="number"
-                  step="any"
-                  min={min}
-                  max={max}
-                  value={coordinateFilter[key]}
-                  onChange={event => setCoordinateFilter(previous => ({
-                    ...previous, [key]: event.target.value
-                  }))}
-                />
-              </label>
-            ))}
-            <button onClick={() => {
-              setFilters({ severity: [], type: [], reviewStatus: [], workOrderStatus: [], neighborhood: [] })
-              setCoordinateFilter({ latitude: '', longitude: '', radius: 2 })
-              setSeverity('all')
-              setFilter('all')
-              setSearch('')
-            }}>Reset filters</button>
-            <p>Enter both coordinates and a positive radius to search nearby issues.</p>
-          </section>
-        )}
-
-        {/* STATISTICS */}
-        <div className="stats-grid">
-
-          <div className="stat-card">
-            <p>TOTAL ISSUES</p>
-            <h2>{totalIssues}</h2>
-            <span>Detected infrastructure issues</span>
-          </div>
-
-          <div className="stat-card">
-            <p>PENDING REVIEW</p>
-            <h2>{pendingReviews}</h2>
-            <span>Awaiting verification</span>
-          </div>
-
-          <div className="stat-card">
-            <p>CRITICAL REPAIRS</p>
-            <h2>{criticalRepairs}</h2>
-            <span>Require priority inspection</span>
-          </div>
-
-          <div className="stat-card">
-            <p>RECOVERY RATE</p>
-            <h2>{recoveryRate}%</h2>
-            <span>Issues with completed work orders</span>
-          </div>
-
-        </div>
-
+        <div className={`results-layout${filterOpen ? ' filters-open' : ''}`}>
+          {filterOpen && (
+            <aside id="issue-filters" className="filter-sidebar" aria-label="Issue filters">
+              <div className="filter-sidebar-header">
+                <h2>Filters <span>{activeFilterCount}</span></h2>
+                <button onClick={() => setFilters(createFilters())} disabled={!activeFilterCount}>Clear All</button>
+              </div>
+              {filterCategories.map(({ key, label, property }) => (
+                <details key={key} className="filter-category" open>
+                  <summary>{label}{filters[key].length > 0 && <span>{filters[key].length}</span>}</summary>
+                  <fieldset>
+                    <legend className="sr-only">{label}</legend>
+                    {(key === 'priority' ? ['Critical', 'High', 'Medium', 'Low'] :
+                      [...new Set(issues.map(issue => issue[property]))].sort()).map(value => (
+                      <label className="filter-checkbox" key={value}>
+                        <input type="checkbox" checked={filters[key].includes(value)} onChange={() => toggleFilter(key, value)} />
+                        <span>{value}</span>
+                        <small>{issues.filter(issue => issue[property] === value).length}</small>
+                      </label>
+                    ))}
+                  </fieldset>
+                  {key === 'neighborhood' && (
+                    <div className="coordinate-fields">
+                      <p>Search near coordinates</p>
+                      {[
+                        ['latitude', 'Latitude', -90, 90], ['longitude', 'Longitude', -180, 180],
+                        ['radius', 'Radius (km)', 0.1, undefined]
+                      ].map(([key, label, min, max]) => (
+                        <label key={key}>{label}
+                          <input type="number" step="any" min={min} max={max} value={coordinateFilter[key]}
+                            aria-describedby="coordinate-help" aria-invalid={coordinateError || undefined}
+                            onChange={event => setFilters(previous => ({ ...previous,
+                              coordinates: { ...previous.coordinates, [key]: event.target.value }
+                            }))} />
+                        </label>
+                      ))}
+                      <p id="coordinate-help" className={coordinateError ? 'filter-error' : ''}>
+                        {coordinateError ? 'Enter latitude (−90 to 90), longitude (−180 to 180), and a radius greater than 0.' :
+                          'Enter both coordinates and a positive radius in km. Coordinates count as one filter.'}
+                      </p>
+                    </div>
+                  )}
+                </details>
+              ))}
+            </aside>
+          )}
+          <div className="results-content">
         {/* MAIN CONTENT */}
         <div className="main-grid">
 
@@ -441,7 +352,7 @@ function App() {
               </span>
 
               <div className="map-controls">
-                {['Satellite', 'Road', 'Risk'].map(view => (
+                {['Satellite', 'Road'].map(view => (
                   <button
                     key={view}
                     aria-pressed={mapView === view}
@@ -458,6 +369,8 @@ function App() {
           {/* INTERACTIVE MAP */}
             <IssueMap
               issues={filteredIssues}
+              focusedIssue={focusedIssue}
+              onFocusIssue={focusOnIssue}
               onSelectIssue={setSelectedIssue}
               view={mapView}
             />
@@ -474,7 +387,7 @@ function App() {
           <aside id="priorities" className="priority-panel">
 
             <div className="priority-header">
-              <h2>Repair priority</h2>
+              <h2>Repair Priority</h2>
               <p>{filteredIssues.length} active detections</p>
             </div>
 
@@ -487,7 +400,7 @@ function App() {
                 <button
                   className="priority-item"
                   key={issue.id}
-                  onClick={() => setSelectedIssue(issue)}
+                  onClick={() => focusOnIssue(issue)}
                 >
 
                   <span className="priority-title">
@@ -550,28 +463,7 @@ function App() {
           <div className="section-header">
             <h2>Detected Issues</h2>
 
-            <div className="filter-buttons">
-              <button
-                className={filter === 'all' ? 'active' : ''}
-                onClick={() => setFilter('all')}
-              >
-                All Issues
-              </button>
-
-              <button
-                className={filter === 'Pending' ? 'active' : ''}
-                onClick={() => setFilter('Pending')}
-              >
-                Pending Review
-              </button>
-
-              <button
-                className={filter === 'Verified' ? 'active' : ''}
-                onClick={() => setFilter('Verified')}
-              >
-                Verified
-              </button>
-            </div>
+            <span>{filteredIssues.length} results</span>
           </div>
 
           <div className="issues-list">
@@ -580,7 +472,7 @@ function App() {
               <button
                 className="issue-card"
                 key={issue.id}
-                onClick={() => setSelectedIssue(issue)}
+                onClick={() => focusOnIssue(issue)}
               >
                 <span>
                   <strong className="issue-type">{issue.type}</strong>
@@ -614,6 +506,8 @@ function App() {
 
         </section>
 
+          </div>
+        </div>
       </main>
 
       {/* ISSUE DETAILS MODAL */}
