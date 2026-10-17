@@ -1,5 +1,5 @@
 :root {
-  font-family: 'DM Sans', system-ui, sans-serif;
+  font-family: 'Roboto Slab', serif;
   color: #333c33;
   background: #f4f6f3;
   color-scheme: light;
@@ -150,7 +150,7 @@ h1 { font-size: clamp(28px, 3vw, 40px); line-height: 1.2; letter-spacing: -1.3px
   --ink: #303a30;
   background: #c4cfb8;
   color: var(--ink);
-  font-family: 'Avenir Next', 'Segoe UI', sans-serif;
+  font-family: 'Roboto Slab', serif;
 }
 body { padding: 36px; }
 .app {
@@ -165,7 +165,7 @@ body { padding: 36px; }
   box-shadow: 0 28px 70px #43583a20;
 }
 h1, .priority-header h2, .section-header h2, .workspace-summary h3 {
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Roboto Slab', serif;
   color: var(--ink);
 }
 .navbar {
@@ -190,7 +190,7 @@ h1, .priority-header h2, .section-header h2, .workspace-summary h3 {
   border-radius: 50%;
   background: #d6dfca;
   color: var(--sage-dark);
-  font: bold 36px Georgia, serif;
+  font: bold 36px 'Roboto Slab', serif;
   border: 6px solid #e6ebdc;
 }
 .workspace-summary h3 { font-size: 19px; }
@@ -380,3 +380,6 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
 .dashboard-filters .universal-search { min-width: 0; }
 .dashboard-filters .export-button { height: 50px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }
 .dashboard-filters .search-input-wrap input[type="search"] { display: block; height: 50px; min-height: 50px; }
+
+/* Include map popups, tooltips, and native form controls in the typography. */
+.app, .app *, .app *::before, .app *::after { font-family: 'Roboto Slab', serif; }
