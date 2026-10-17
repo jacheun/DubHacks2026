@@ -4,7 +4,7 @@ import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import './App.css'
 
-const initialIssues [
+const initialIssues = [
   {
     id: 1,
     type: 'Pothole',
@@ -89,7 +89,8 @@ function App() {
   })
 
   // Dash
-  <>
+  return (
+    <>
       <div className="app">
 
         {/* Navigation */}
@@ -118,13 +119,13 @@ function App() {
           <div className="stats-grid">
             <div className="stat-card">
               <p>Total Issues</p>
-              <h2>(issues.length)</h2>
+              <h2>{issues.length}</h2>
             </div>
 
             <div className="stat-card">
               <p>Pending Review</p>
               <h2>
-                {issues.filter(i => i.status === 'Pending').length}
+                {issues.filter(i => i.reviewStatus === 'Pending').length}
               </h2>
             </div>
 
@@ -138,15 +139,26 @@ function App() {
           {/* Detected Issues */}
           <section id="issues" className="issues-section">
 
-            <div className="seciton-header">
+            <div className="section-header">
               <h2>Detected Issues</h2>
 
               <div className="filter-buttons">
-                <button
-                className={filter === ''}
+                {['all', 'Pending', 'Verified'].map((status) => (
+                  <button
+                    key={status}
+                    className={filter === status ? 'active' : ''}
+                    onClick={() => setFilter(status)}
+                  >
+                    {status === 'all' ? 'All' : status}
+                  </button>
+                ))}
               </div>
             </div>
           </section>
         </main>
-        
+      </div>
+    </>
+  )
+}
+
 export default App
