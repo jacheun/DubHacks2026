@@ -244,9 +244,9 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
 .priority-title strong { color: var(--sage-dark); }
 .review-badge, .work-badge, .priority { border-radius: 8px; }
 .progress-track { border-radius: 5px; background: #edf1e7; }
-.issues-section { background: #edf3e8; border: 0; border-radius: 24px; padding: 10px 20px 20px; margin-top: 34px; }
+.issues-section { background: transparent; border: 0; border-radius: 0; padding: 0; margin-top: 34px; }
 .section-header { padding: 20px 5px; border: 0; }
-.issue-card { border: 0; border-radius: 16px; margin-top: 10px; padding: 20px; box-shadow: 0 8px 20px #60745106; }
+.issue-card { border: 0; border-bottom: 1px solid #e2e8dc; border-radius: 0; margin: 0; padding: 20px 5px; background: transparent; box-shadow: none; }
 .filter-buttons button { border-radius: 12px; color: #697861; }
 .filter-buttons button.active { background: #fff; border-color: #e0e7d8; color: var(--sage-dark); }
 .advanced-filters { border: 0; border-radius: 22px; background: #f1f5eb; padding: 24px; }
@@ -281,7 +281,7 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
   .stat-card:nth-child(odd) { padding-left: 0; }
   .stat-card:nth-child(even) { border: 0; }
   .priority-list { grid-template-columns: 1fr; }
-  .issues-section { padding: 8px 12px 14px; }
+  .issues-section { padding: 0; }
   .map-area { min-height: 320px; }
 }
 
