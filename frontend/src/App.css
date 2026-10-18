@@ -390,3 +390,50 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
 .evidence-image { position: relative; width: 100%; }
 .evidence-image img { display: block; width: 100%; height: auto; }
 .evidence-image svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* Imagery controls above the road-condition overview. */
+.scan-console { margin-bottom: 30px; border: 1px solid #dce4d8; border-radius: 12px; background: #fbfcf9; overflow: hidden; }
+.scan-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 20px 22px; }
+.scan-heading { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.scan-icon { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 auto; border: 1px solid #dce5d7; border-radius: 10px; background: #edf2e9; color: #637b5d; }
+.scan-icon svg { width: 23px; height: 23px; }
+.scan-heading h2 { font-size: 15px; font-weight: 650; letter-spacing: -.3px; }
+.scan-heading p { margin-top: 4px; color: #768371; font-size: 11px; line-height: 1.6; }
+.scan-toolbar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+.scan-auto-toggle { position: relative; display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-size: 12px; white-space: nowrap; color: #53654e; }
+.scan-auto-toggle input { position: absolute; width: 1px; height: 1px; opacity: 0; padding: 0; }
+.scan-toggle-track { position: relative; width: 34px; height: 20px; border-radius: 20px; background: #cbd3c6; transition: background .15s; }
+.scan-toggle-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #263c2520; transition: transform .15s; }
+.scan-auto-toggle input:checked + .scan-toggle-track { background: #637b5d; }
+.scan-auto-toggle input:checked + .scan-toggle-track::after { transform: translateX(14px); }
+.scan-auto-toggle input:focus-visible + .scan-toggle-track { outline: 3px solid #80b596; outline-offset: 4px; }
+.scan-toolbar-divider { width: 1px; height: 25px; background: #dce4d8; }
+.scan-batch-label { display: flex; align-items: center; gap: 9px; font-size: 11px; color: #768371; white-space: nowrap; }
+.scan-batch-label select { padding: 9px 10px; font-size: 12px; border-color: #dce4d8; border-radius: 6px; background: #fff; }
+.scan-batch-label select:disabled { opacity: .6; cursor: wait; }
+.scan-submit { display: inline-flex; justify-content: center; align-items: center; gap: 8px; border: 1px solid #637b5d; border-radius: 7px; background: #637b5d; color: #fff; padding: 11px 15px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.scan-submit svg { width: 16px; height: 16px; }
+.scan-submit:hover:not(:disabled) { background: #50664b; border-color: #50664b; }
+.scan-submit:disabled { opacity: .5; cursor: not-allowed; }
+.scan-status-bar { display: flex; align-items: baseline; gap: 14px; padding: 11px 22px; border-top: 1px solid #e2e8dd; background: #f1f5ed; }
+.scan-state { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; color: #52694b; font-size: 10px; font-weight: 650; }
+.scan-state-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.scan-state.is-scanning .scan-state-dot { box-shadow: 0 0 0 3px #637b5d20; }
+.scan-status-bar p { color: #75816e; font-size: 10px; line-height: 1.7; overflow-wrap: anywhere; }
+.scan-status-error { background: #fbf1eb; border-top-color: #eeddd1; }
+.scan-status-error .scan-state, .scan-status-error p { color: #9a593c; }
+@media (max-width: 1200px) {
+  .scan-toolbar { align-items: flex-start; flex-direction: column; gap: 18px; }
+  .scan-toolbar-controls { width: 100%; }
+  .scan-submit { margin-left: auto; }
+}
+@media (max-width: 520px) {
+  .scan-toolbar { padding: 17px; }
+  .scan-toolbar-controls { gap: 14px; justify-content: space-between; }
+  .scan-toolbar-divider { display: none; }
+  .scan-submit { width: 100%; margin-left: 0; }
+  .scan-batch-label { gap: 7px; }
+  .scan-status-bar { flex-direction: column; gap: 3px; padding: 11px 17px; }
+}
+
+.dashboard-location { margin-bottom: 10px; color: #303a30; font-size: 16px; font-weight: 500; letter-spacing: normal; }
