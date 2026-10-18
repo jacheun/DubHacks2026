@@ -319,20 +319,52 @@ function App() {
 
       {/* DASHBOARD */}
       <main id="dashboard" className="dashboard">
-        <form className="analysis-form" onSubmit={scanArea}>
-          <span>Find road damage in the visible map area</span>
-          <label><input type="checkbox" checked={autoScan} onChange={event => setAutoScan(event.target.checked)} /> Scan automatically as map moves</label>
-          <label>Images per scan
-            <select value={scanLimit} disabled={analyzing} onChange={event => setScanLimit(Number(event.target.value))}>
-              {[5, 10, 20, 30].map(limit => <option key={limit} value={limit}>{limit}</option>)}
-            </select>
-          </label>
-          <button disabled={!scanBounds}>{analyzing ? 'Scan current area instead' : 'Scan map area'}</button>
-          <small>Pan or zoom, then pause to scan. Dashboard results follow the visible area; earlier issues stay saved.</small>
-        </form>
-        {loading && <p role="status">Loading issues…</p>}
-        {apiError && <p role="alert">{apiError}</p>}
-        {analysisMessage && <p role="status">{analysisMessage}</p>}
+        <section className="scan-console" aria-labelledby="scan-console-title" aria-busy={analyzing}>
+          <form className="scan-toolbar" onSubmit={scanArea}>
+            <div className="scan-heading">
+              <span className="scan-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                  <path d="M8 3H4a1 1 0 0 0-1 1v4m13-5h4a1 1 0 0 1 1 1v4M3 16v4a1 1 0 0 0 1 1h4m8 0h4a1 1 0 0 0 1-1v-4M7 12h10M12 7v10" />
+                </svg>
+              </span>
+              <div>
+                <h2 id="scan-console-title">Imagery scan</h2>
+                <p>Find road damage in the current map view.</p>
+              </div>
+            </div>
+            <div className="scan-toolbar-controls">
+              <label className="scan-auto-toggle">
+                <input type="checkbox" role="switch" checked={autoScan}
+                  onChange={event => setAutoScan(event.target.checked)} />
+                <span className="scan-toggle-track" aria-hidden="true" />
+                <span>Auto scan</span>
+              </label>
+              <span className="scan-toolbar-divider" aria-hidden="true" />
+              <label className="scan-batch-label" htmlFor="scan-batch-size">Batch size
+                <select id="scan-batch-size" value={scanLimit} disabled={analyzing}
+                  onChange={event => setScanLimit(Number(event.target.value))}>
+                  {[5, 10, 20, 30].map(limit => <option key={limit} value={limit}>{limit} images</option>)}
+                </select>
+              </label>
+              <button className="scan-submit" disabled={!scanBounds}>
+                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" />
+                </svg>
+                {analyzing ? 'Scan this area instead' : 'Scan map area'}
+              </button>
+            </div>
+          </form>
+          <div className={`scan-status-bar${apiError ? ' scan-status-error' : ''}`}>
+            <span className={`scan-state${analyzing ? ' is-scanning' : ''}`}>
+              <span className="scan-state-dot" aria-hidden="true" />
+              {apiError ? 'Needs attention' : analyzing ? 'Scanning' : autoScan ? 'Auto scan on' : 'Manual mode'}
+            </span>
+            <p role={apiError ? 'alert' : 'status'}>
+              {apiError || (loading ? 'Loading saved issues…' : analysisMessage) ||
+                (autoScan ? 'Pan or zoom, then pause to scan. Earlier issues stay saved.' : 'Position the map, then select Scan map area.')}
+            </p>
+          </div>
+        </section>
 
         {/* HEADER */}
         <div className="dashboard-header">
