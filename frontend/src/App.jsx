@@ -1,3 +1,4 @@
+import { readApiJson } from './api'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import IssueMap from './components/IssueMap'
 import './App.css'
@@ -88,7 +89,7 @@ function App() {
   async function loadIssues() {
     const response = await fetch('/api/issues')
     if (!response.ok) throw new Error('Could not load issues. Check the backend is running.')
-    setIssues(await response.json())
+    setIssues(await readApiJson(response))
   }
 
   useEffect(() => {
@@ -96,7 +97,7 @@ function App() {
     fetch('/api/issues', { signal: controller.signal })
       .then(response => {
         if (!response.ok) throw new Error('Could not load issues. Check the backend is running.')
-        return response.json()
+        return readApiJson(response)
       })
       .then(setIssues)
       .catch(error => { if (error.name !== 'AbortError') setApiError(error.message) })
@@ -117,7 +118,7 @@ function App() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bbox: scanBounds, limit: scanLimit }),
       })
-      const data = await response.json()
+      const data = await readApiJson(response)
       if (request !== scanRequest.current) return
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not start scan.')
       setScanId(data.id)
@@ -140,7 +141,7 @@ function App() {
       try {
         const response = await fetch(`/api/scans/${scanId}`)
         if (!response.ok) throw new Error('Could not check scan progress. Reload and retry.')
-        const scan = await response.json()
+        const scan = await readApiJson(response)
         if (stopped) return
         await loadIssues()
         if (stopped) return
@@ -216,7 +217,7 @@ function App() {
         body: JSON.stringify({ reviewStatus: newStatus }),
       })
       if (!response.ok) throw new Error('Review change could not be saved.')
-      const saved = await response.json()
+      const saved = await readApiJson(response)
       setIssues(previous => previous.map(issue => issue.id === id ? saved : issue))
       setSelectedIssue(previous => previous?.id === id ? saved : previous)
     } catch (error) { setApiError(error.message) }
@@ -232,7 +233,7 @@ function App() {
         body: JSON.stringify({ latitude: Number(fields.get('latitude')), longitude: Number(fields.get('longitude')) }),
       })
       if (!response.ok) throw new Error('Could not save location.')
-      const saved = await response.json()
+      const saved = await readApiJson(response)
       setIssues(previous => previous.map(issue => issue.id === saved.id ? saved : issue))
       setSelectedIssue(saved)
       setFocusedIssue(saved)

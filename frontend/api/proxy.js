@@ -8,8 +8,11 @@ export default async function handler(request, response) {
     const incoming = new URL(request.url, 'https://frontend.local')
     if (!incoming.pathname.startsWith('/api/')) return response.status(404).end()
     const target = new URL(base.origin)
-    target.pathname = incoming.pathname
-    target.search = incoming.search
+    const forwardedPath = request.query?.__backend_path ?? incoming.searchParams.get('__backend_path')
+    const path = Array.isArray(forwardedPath) ? forwardedPath.join('/') : forwardedPath
+    target.pathname = path ? `/api/${path}` : incoming.pathname
+    incoming.searchParams.delete('__backend_path')
+    target.search = incoming.searchParams.toString()
     const headers = {}
     if (request.headers['content-type']) headers['content-type'] = request.headers['content-type']
     const hasBody = !['GET', 'HEAD'].includes(request.method)

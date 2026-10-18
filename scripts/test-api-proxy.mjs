@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import handler from '../frontend/api/[...path].js'
+import handler from '../frontend/api/proxy.js'
 
 function response() {
   return { code: 200, headers: {}, body: null,
@@ -60,4 +60,20 @@ test('unreachable backend returns a useful error', async () => {
     assert.equal(res.code,502)
     assert.ok(!JSON.stringify(res.body).includes('private details'))
   } finally { globalThis.fetch=originalFetch }
+})
+
+
+test('explicit rewrite forwards nested scan status and removes routing parameter', async () => {
+  process.env.API_BACKEND_URL='https://backend.example'
+  const originalFetch=globalThis.fetch
+  try {
+    globalThis.fetch=async url => {
+      assert.equal(url.href,'https://backend.example/api/scans/abc?check=1')
+      return Response.json({id:'abc',status:'completed'})
+    }
+    const res=response()
+    await handler({url:'/api/proxy?__backend_path=scans%2Fabc&check=1', query:{__backend_path:'scans/abc'}, method:'GET',headers:{}},res)
+    assert.equal(res.code,200)
+    assert.equal(JSON.parse(res.body.toString()).id,'abc')
+  } finally {globalThis.fetch=originalFetch}
 })

@@ -44,7 +44,7 @@ Render origin, for example `https://your-service.onrender.com`. Select the requi
 Production/Preview environments and redeploy. This is not a `VITE_` variable and is
 not exposed to the browser. Never put the Mapillary token in Vercel client code.
 
-Ensure the deployment includes `frontend/api/[...path].js`. It proxies `/api/*`
+Ensure the deployment includes `frontend/api/proxy.js`. The explicit rewrite in `frontend/vercel.json` sends `/api/*` to this function. It proxies `/api/*`
 requests and evidence images to Render. No cross-origin browser configuration is
 needed. Vite's existing localhost proxy continues to handle local development.
 
