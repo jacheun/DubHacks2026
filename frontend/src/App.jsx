@@ -153,7 +153,7 @@ function App() {
         }
         setAnalysisMessage(scan.status === 'discovering'
           ? 'Finding Mapillary imagery in this area…'
-          : `${scan.processed}/${scan.total} images checked · ${scan.detections} pothole candidate(s) · ${scan.failed} failed · ${scan.skipped} already analyzed${scan.status === 'completed' ? ' · Scan complete' : ''}`)
+          : `${scan.processed}/${scan.total} images checked · ${scan.detections} road-damage candidate(s) · ${scan.failed} failed · ${scan.skipped} already analyzed${scan.status === 'completed' ? ' · Scan complete' : ''}`)
         if (['completed', 'cancelled'].includes(scan.status)) {
           setAnalyzing(false)
           setScanId(null)
@@ -319,7 +319,7 @@ function App() {
       {/* DASHBOARD */}
       <main id="dashboard" className="dashboard">
         <form className="analysis-form" onSubmit={scanArea}>
-          <span>Find potholes in the visible map area</span>
+          <span>Find road damage in the visible map area</span>
           <label><input type="checkbox" checked={autoScan} onChange={event => setAutoScan(event.target.checked)} /> Scan automatically as map moves</label>
           <label>Images per scan
             <select value={scanLimit} disabled={analyzing} onChange={event => setScanLimit(Number(event.target.value))}>
@@ -510,7 +510,8 @@ function App() {
                   </span>
 
                   <span className="issue-description">
-                    {issue.description}
+                    {issue.type} · Model confidence: {(issue.confidence * 100).toFixed(1)}%
+                    {issue.duplicateIssueIds?.length > 0 && ` · ${issue.duplicateIssueIds.length + 1} matching detections`}
                   </span>
 
                   <span className="status-row">
@@ -527,7 +528,7 @@ function App() {
                     <span
                       className={`progress-fill ${issue.priority.toLowerCase()}`}
                       style={{
-                        width: `${issue.priorityScore ?? 'Unassigned'}%`
+                        width: `${issue.priorityScore ?? 0}%`
                       }}
                     ></span>
                   </span>

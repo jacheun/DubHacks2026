@@ -42,9 +42,10 @@ class ScanTests(unittest.TestCase):
             scan = self.scan()
             api.run_scan(scan, api.ScanRequest(limit=2))
             self.assertEqual(scan['status'], 'completed')
-            self.assertEqual(scan['detections'], 2)  # Cracks are not pothole issues.
+            self.assertEqual(scan['detections'], 4)  # Both cracks and potholes become issues.
             issues = api.issues()
-            self.assertEqual(len(issues), 2)
+            self.assertEqual(len(issues), 4)
+            self.assertEqual({issue['type'] for issue in issues}, {'Pothole', 'Longitudinal Crack'})
             api.update_issue(issues[0]['id'], api.ReviewRequest(reviewStatus='Rejected'))
             repeat = self.scan()
             api.run_scan(repeat, api.ScanRequest(limit=2))
@@ -52,6 +53,20 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(repeat['processed'], 0)
             self.assertEqual(inference.call_count, 2)
             self.assertEqual(api.issues()[0]['reviewStatus'], 'Rejected')
+
+    def test_reanalysis_reuses_issues_and_preserves_review(self):
+        with patch.object(api, 'fetch_json', return_value={'id': '123'}), \
+             patch.object(api, 'process_image', return_value=self.report()):
+            first = api.analyze(api.AnalysisRequest(imageId='123', confidence=.35))
+            issue_id = first['issueIds'][0]
+            api.update_issue(issue_id, api.ReviewRequest(reviewStatus='Verified', latitude=48, longitude=-123))
+            second = api.analyze(api.AnalysisRequest(imageId='123', confidence=.5))
+            self.assertEqual(set(first['issueIds']), set(second['issueIds']))
+            self.assertEqual(len(api.issues()), 2)
+            saved = next(issue for issue in api.issues() if issue['id'] == issue_id)
+            self.assertEqual(saved['reviewStatus'], 'Verified')
+            self.assertEqual(saved['latitude'], 48)
+            self.assertEqual(len(saved['observations']), 1)
 
     def test_no_coverage_completes_without_issues(self):
         with patch.object(api, 'discover_images', return_value=[]):
@@ -68,7 +83,7 @@ class ScanTests(unittest.TestCase):
             api.run_scan(scan, api.ScanRequest(limit=2))
             self.assertEqual(scan['status'], 'completed')
             self.assertEqual(scan['failed'], 1)
-            self.assertEqual(len(api.issues()), 1)
+            self.assertEqual(len(api.issues()), 2)
 
     def test_restart_marks_unfinished_scan_failed(self):
         api.save_scan(self.scan())

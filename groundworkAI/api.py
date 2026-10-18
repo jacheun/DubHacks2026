@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from discovery import discover_images
+from deduplication import deduplicate, same_defect
 
 import requests
 from dotenv import load_dotenv
@@ -19,17 +20,35 @@ import os
 
 from main import ROOT, FIELDS, fetch_json, process_image
 
-DATA = ROOT / 'runs'
-DATA.mkdir(exist_ok=True)
+from settings import DATA_DIR, MODEL_PATH
+
+DATA = DATA_DIR
+DATA.mkdir(parents=True, exist_ok=True)
 IMAGES = DATA / 'mapillary'
 IMAGES.mkdir(exist_ok=True)
 DB = DATA / 'issues.sqlite3'
+DAMAGE_TYPES = {
+    'pothole': 'Pothole', 'potholes': 'Pothole', 'd40': 'Pothole',
+    'longitudinal crack': 'Longitudinal Crack', 'd00': 'Longitudinal Crack',
+    'transverse crack': 'Transverse Crack', 'd10': 'Transverse Crack',
+    'alligator crack': 'Alligator Crack', 'd20': 'Alligator Crack',
+}
+ANALYSIS_SCHEMA = 'road-damage-v2'
 LOCK = Lock()
 SCAN_LOCK = Lock()
 CANCELLATIONS = {}
 WORKER = ThreadPoolExecutor(max_workers=1)
 app = FastAPI(title='GroundworkAI')
 app.mount('/api/images', StaticFiles(directory=IMAGES), name='images')
+
+@app.get('/api/health')
+def health():
+    if not MODEL_PATH.is_file():
+        raise HTTPException(503, 'Model weights are missing.')
+    with connection() as db:
+        db.execute('SELECT 1')
+    return {'status': 'ok', 'modelVersion': hashlib.sha256(MODEL_PATH.read_bytes()).hexdigest()[:12]}
+
 
 
 @contextmanager
@@ -59,7 +78,7 @@ class ReviewRequest(BaseModel):
 @app.get('/api/issues')
 def issues():
     with connection() as db:
-        return [json.loads(row[0]) for row in db.execute('SELECT data FROM issues ORDER BY id')]
+        return deduplicate([json.loads(row[0]) for row in db.execute('SELECT data FROM issues ORDER BY id')])
 
 
 @app.patch('/api/issues/{issue_id}')
@@ -82,11 +101,11 @@ def update_issue(issue_id: str, update: ReviewRequest):
 def analyze(body: AnalysisRequest):
     # Serialize inference and writes; repeated requests preserve review decisions.
     with LOCK:
-        weights = Path(__file__).parent / 'models/best.pt'
+        weights = MODEL_PATH
         if not weights.exists():
             raise HTTPException(503, 'Install models/best.pt before analyzing images.')
         version = hashlib.sha256(weights.read_bytes()).hexdigest()[:12]
-        key = f'{body.imageId}-{version}-{body.confidence}'
+        key = f'{body.imageId}-{version}-{body.confidence}-{ANALYSIS_SCHEMA}'
         with connection() as db:
             cached = db.execute('SELECT data FROM analyses WHERE id=?', (key,)).fetchone()
         if cached:
@@ -108,11 +127,12 @@ def analyze(body: AnalysisRequest):
         created = []
         with connection() as db:
             for index, detection in enumerate(report['detections']):
-                if detection['label'].lower().replace('_', ' ') not in {'pothole', 'potholes', 'd40'}:
+                issue_type = DAMAGE_TYPES.get(detection['label'].lower().replace('_', ' '))
+                if issue_type is None:
                     continue
                 issue_id = f'{key}-{index}'
                 issue = {
-                    'id': issue_id, 'type': detection['label'].replace('_', ' ').title(),
+                    'id': issue_id, 'type': issue_type,
                     'location': f'Mapillary image {body.imageId}', 'neighborhood': 'Unknown',
                     'latitude': location.get('latitude'), 'longitude': location.get('longitude'),
                     'locationAccuracy': report['location_accuracy'],
@@ -125,8 +145,21 @@ def analyze(body: AnalysisRequest):
                     'reviewId': issue_id, 'reviewStatus': 'Pending',
                     'workOrderId': None, 'workOrderStatus': 'Not Created',
                 }
-                db.execute('INSERT OR IGNORE INTO issues VALUES (?, ?)', (issue_id, json.dumps(issue)))
-                created.append(issue_id)
+                existing = deduplicate([json.loads(row[0]) for row in db.execute('SELECT data FROM issues')])
+                match = next((candidate for candidate in existing if same_defect(candidate, issue)), None)
+                if match is not None:
+                    # Retain the original evidence and review fields; record new observations separately.
+                    canonical = json.loads(db.execute('SELECT data FROM issues WHERE id=?', (match['id'],)).fetchone()[0])
+                    observation = {key: issue[key] for key in ['modelVersion', 'confidence', 'bbox', 'imageWidth', 'imageHeight']}
+                    observations = canonical.setdefault('observations', [])
+                    if observation not in observations:
+                        observations.append(observation)
+                    db.execute('UPDATE issues SET data=? WHERE id=?', (json.dumps(canonical), canonical['id']))
+                    created.append(canonical['id'])
+                else:
+                    db.execute('INSERT OR IGNORE INTO issues VALUES (?, ?)', (issue_id, json.dumps(issue)))
+                    created.append(issue_id)
+            created = list(dict.fromkeys(created))
             response = {'imageId': body.imageId, 'issueIds': created,
                         'detectionCount': len(created),
                         'imageUrl': f'/api/images/{body.imageId}/original.jpg'}
@@ -161,14 +194,14 @@ def run_scan(scan, body):
             scan['status'] = 'cancelled'
             return
         scan['discovered'] = len(image_ids)
-        weights = Path(__file__).parent / 'models/best.pt'
+        weights = MODEL_PATH
         if not weights.exists():
             raise ValueError('Install models/best.pt before scanning.')
         version = hashlib.sha256(weights.read_bytes()).hexdigest()[:12]
         with connection() as db:
             processed = {row[0] for row in db.execute('SELECT id FROM analyses')}
         pending = [image_id for image_id in image_ids
-                   if f'{image_id}-{version}-{body.confidence}' not in processed]
+                   if f'{image_id}-{version}-{body.confidence}-{ANALYSIS_SCHEMA}' not in processed]
         scan['skipped'] = len(image_ids) - len(pending)
         selected = pending[:body.limit]
         scan['total'] = len(selected)

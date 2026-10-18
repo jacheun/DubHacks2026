@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: groundwork-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Paid service: 2 GB RAM for CPU inference; review pricing before provisioning.
+    plan: 1c-2g
+    numInstances: 1
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: MAPILLARY_TOKEN
+        sync: false
+      - key: GROUNDWORK_DATA_DIR
+        value: /var/data/groundwork
+      - key: GROUNDWORK_MODEL_PATH
+        value: /app/groundworkAI/models/best.pt
+    disk:
+      name: groundwork-data
+      mountPath: /var/data
+      sizeGB: 5
