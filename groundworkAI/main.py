@@ -67,6 +67,7 @@ def process_image(session, metadata, confidence):
         'location_accuracy': 'approximate' if coordinates else 'unknown',
     })
     (output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
+    return report
 
 
 def main():

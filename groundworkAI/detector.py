@@ -13,7 +13,7 @@ MODEL_PATH = Path(__file__).parent / 'models' / 'best.pt'
 
 
 @lru_cache(maxsize=1)
-def load_model():
+def load_model(weights_modified=None):
     if not MODEL_PATH.is_file():
         raise FileNotFoundError(f'Model weights not found: {MODEL_PATH}')
     # Ultralytics strips apostrophes from weight paths; use a relative path.
@@ -25,7 +25,7 @@ def test_model(source, confidence=0.35, output_dir=None):
     if not 0 < confidence <= 1:
         raise ValueError('Confidence must be greater than 0 and at most 1.')
     output_dir = Path(output_dir) if output_dir else ROOT / 'runs/model-test'
-    result = load_model().predict(source=source, conf=confidence, verbose=False)[0]
+    result = load_model(MODEL_PATH.stat().st_mtime_ns).predict(source=source, conf=confidence, verbose=False)[0]
     detections = [
         {
             'label': result.names[int(box.cls.item())],
