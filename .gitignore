@@ -6,3 +6,10 @@ datasets/
 runs/
 *.pt
 .DS_Store
+
+# Deploy only the selected inference weights; keep training data/checkpoints ignored.
+!groundworkAI/models/best.pt
+.vercel/
+.env.*
+!.env.example
+!**/.env.example

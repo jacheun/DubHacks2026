@@ -8,12 +8,11 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
-ROOT = Path(__file__).resolve().parents[1]
-MODEL_PATH = Path(__file__).parent / 'models' / 'best.pt'
+from settings import ROOT, DATA_DIR, MODEL_PATH
 
 
 @lru_cache(maxsize=1)
-def load_model():
+def load_model(weights_modified=None):
     if not MODEL_PATH.is_file():
         raise FileNotFoundError(f'Model weights not found: {MODEL_PATH}')
     # Ultralytics strips apostrophes from weight paths; use a relative path.
@@ -24,8 +23,8 @@ def test_model(source, confidence=0.35, output_dir=None):
     """Predict on one image and save boxes and confidence scores."""
     if not 0 < confidence <= 1:
         raise ValueError('Confidence must be greater than 0 and at most 1.')
-    output_dir = Path(output_dir) if output_dir else ROOT / 'runs/model-test'
-    result = load_model().predict(source=source, conf=confidence, verbose=False)[0]
+    output_dir = Path(output_dir) if output_dir else DATA_DIR / 'model-test'
+    result = load_model(MODEL_PATH.stat().st_mtime_ns).predict(source=source, conf=confidence, verbose=False)[0]
     detections = [
         {
             'label': result.names[int(box.cls.item())],
@@ -54,7 +53,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('image', type=Path)
     parser.add_argument('--conf', type=float, default=0.35)
-    parser.add_argument('--output', type=Path, default=ROOT / 'runs/model-test')
+    parser.add_argument('--output', type=Path, default=DATA_DIR / 'model-test')
     args = parser.parse_args()
     if not args.image.is_file():
         parser.error(f'Image not found: {args.image}')

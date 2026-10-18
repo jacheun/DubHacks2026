@@ -12,7 +12,7 @@ from PIL import Image
 
 from detector import test_model
 
-ROOT = Path(__file__).resolve().parents[1]
+from settings import ROOT, DATA_DIR
 FIELDS = 'id,computed_geometry,captured_at,thumb_1024_url'
 
 
@@ -50,7 +50,7 @@ def process_image(session, metadata, confidence):
     if not response.ok:
         raise ValueError(f'Image download returned HTTP {response.status_code}.')
     image = Image.open(BytesIO(response.content)).convert('RGB')
-    output = ROOT / 'runs/mapillary' / image_id
+    output = DATA_DIR / 'mapillary' / image_id
     output.mkdir(parents=True, exist_ok=True)
     image.save(output / 'original.jpg')
     print(f'\nTesting Mapillary image {image_id}')
@@ -67,6 +67,7 @@ def process_image(session, metadata, confidence):
         'location_accuracy': 'approximate' if coordinates else 'unknown',
     })
     (output / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
+    return report
 
 
 def main():

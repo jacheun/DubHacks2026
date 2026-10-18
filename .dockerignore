@@ -1,0 +1,14 @@
+.git
+.venv
+**/.env
+**/.env.*
+**/__pycache__
+**/*.pyc
+**/.DS_Store
+node_modules
+frontend
+datasets
+runs
+*.pt
+**/*.pt
+!groundworkAI/models/best.pt

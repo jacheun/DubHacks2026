@@ -6,7 +6,8 @@
     "build": "npm --prefix frontend run build",
     "lint": "npm --prefix frontend run lint",
     "preview": "npm --prefix frontend run preview",
-    "postinstall": "npm --prefix frontend ci"
+    "postinstall": "npm --prefix frontend ci",
+    "tunnel": "cloudflared tunnel --protocol http2 --url http://127.0.0.1:8000"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

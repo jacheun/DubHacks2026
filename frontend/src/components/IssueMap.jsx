@@ -4,27 +4,27 @@ import 'leaflet/dist/leaflet.css'
 
 const priorityColors = { Critical: '#c44735', High: '#d68b32', Medium: '#728a5c' }
 
-function MapControls({ issues, focusedIssue }) {
+function MapControls({ issues, focusedIssue, onBoundsChange }) {
   const map = useMap()
+
+  useEffect(() => {
+    function reportBounds() {
+      const bounds = map.getBounds()
+      onBoundsChange?.([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()])
+    }
+    reportBounds()
+    map.on('moveend', reportBounds)
+    return () => map.off('moveend', reportBounds)
+  }, [map, onBoundsChange])
 
   useEffect(() => {
     const observer = new ResizeObserver(() => {
       map.invalidateSize({ pan: false })
+      map.fire('moveend')
     })
     observer.observe(map.getContainer())
     return () => observer.disconnect()
   }, [map])
-
-  const issueCoordinates = JSON.stringify(issues.map(issue => [issue.latitude, issue.longitude]))
-
-  useEffect(() => {
-    const coordinates = JSON.parse(issueCoordinates)
-    if (coordinates.length) {
-      map.fitBounds(coordinates, {
-        padding: [45, 45], maxZoom: 15,
-      })
-    }
-  }, [issueCoordinates, map])
 
   useEffect(() => {
     if (focusedIssue) {
@@ -40,14 +40,14 @@ function MapControls({ issues, focusedIssue }) {
   )
 }
 
-export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectIssue, view = 'Road' }) {
+export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectIssue, view = 'Road', onBoundsChange }) {
   const satellite = view === 'Satellite'
 
   return (
     <MapContainer
       className="issue-map"
-      center={[47.635, -122.335]}
-      zoom={11}
+      center={[47.6067, -122.3287]}
+      zoom={16}
       scrollWheelZoom
     >
       <TileLayer
@@ -59,7 +59,7 @@ export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectI
           ? 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
           : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
       />
-      <MapControls issues={issues} focusedIssue={focusedIssue} />
+      <MapControls issues={issues} focusedIssue={focusedIssue} onBoundsChange={onBoundsChange} />
       {issues.map(issue => (
         <CircleMarker
           key={issue.id}
@@ -78,7 +78,7 @@ export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectI
               <strong>{issue.type}</strong>
               <p>{issue.location} · {issue.neighborhood}</p>
               <p>{issue.description}</p>
-              <p>{issue.priority} priority · Score {issue.priorityScore}</p>
+              <p>{issue.priority} priority · Score {issue.priorityScore ?? 'Unassigned'}</p>
               <button type="button" onClick={() => onSelectIssue(issue)}>View issue details</button>
             </div>
           </Popup>

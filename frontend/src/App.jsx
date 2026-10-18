@@ -1,77 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import IssueMap from './components/IssueMap'
 import './App.css'
-
-const initialIssues = [
-  {
-    id: 1,
-    type: 'Pothole',
-    location: 'Rainier Ave S',
-    neighborhood: 'Rainier Valley',
-    latitude: 47.5605,
-    longitude: -122.2885,
-    description: 'Deep surface failure spanning the northbound curb lane.',
-    priority: 'Critical',
-    priorityScore: 94,
-    reviewId: 'REV-001',
-    reviewStatus: 'Verified',
-    workOrderId: 'WO-001',
-    workOrderStatus: 'Crew Dispatched',
-    x: 62,
-    y: 54
-  },
-  {
-    id: 2,
-    type: 'Sidewalk Crack',
-    location: '15th Ave NW',
-    neighborhood: 'Ballard',
-    latitude: 47.6687,
-    longitude: -122.3767,
-    description: 'Multiple connected cracks creating an uneven pedestrian path.',
-    priority: 'High',
-    priorityScore: 81,
-    reviewId: 'REV-002',
-    reviewStatus: 'Pending',
-    workOrderId: null,
-    workOrderStatus: 'Not Created',
-    x: 30,
-    y: 43
-  },
-  {
-    id: 3,
-    type: 'Damaged Curb Ramp',
-    location: 'Lake City Way NE',
-    neighborhood: 'Lake City',
-    latitude: 47.7195,
-    longitude: -122.2956,
-    description: 'Visible curb ramp deterioration requiring inspection.',
-    priority: 'High',
-    priorityScore: 76,
-    reviewId: 'REV-003',
-    reviewStatus: 'Verified',
-    workOrderId: 'WO-002',
-    workOrderStatus: 'Assigned',
-    x: 75,
-    y: 28
-  },
-  {
-    id: 4,
-    type: 'Road Crack',
-    location: 'University Way NE',
-    neighborhood: 'University District',
-    latitude: 47.6615,
-    longitude: -122.3131,
-    description: 'Longitudinal pavement cracking along the road surface.',
-    priority: 'Medium',
-    priorityScore: 64,
-    reviewId: 'REV-004',
-    reviewStatus: 'Pending',
-    workOrderId: null,
-    workOrderStatus: 'Not Created',
-    x: 24,
-    y: 70
-  }
-]
 
 const filterCategories = [
   { key: 'neighborhood', label: 'Location', property: 'neighborhood' },
@@ -133,7 +62,7 @@ function App() {
     }
   }, [])
 
-  const [issues, setIssues] = useState(initialIssues)
+  const [issues, setIssues] = useState([])
   const [filterOpen, setFilterOpen] = useState(false)
   const [filters, setFilters] = useState(createFilters)
   const [search, setSearch] = useState('')
@@ -142,6 +71,101 @@ function App() {
   const [focusedIssue, setFocusedIssue] = useState(null)
   const [mapView, setMapView] = useState('Satellite')
   const dialogRef = useRef(null)
+  const [apiError, setApiError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [scanBounds, setScanBounds] = useState(null)
+  const [autoScan, setAutoScan] = useState(true)
+  const scanRequest = useRef(0)
+  const [scanId, setScanId] = useState(null)
+  const [scanLimit, setScanLimit] = useState(10)
+  const [analysisMessage, setAnalysisMessage] = useState('')
+  const handleMapBoundsChange = useCallback(bounds => {
+    setScanBounds(previous => previous && previous.every((value, index) => value === bounds[index]) ? previous : bounds)
+  }, [])
+
+
+  async function loadIssues() {
+    const response = await fetch('/api/issues')
+    if (!response.ok) throw new Error('Could not load issues. Check the backend is running.')
+    setIssues(await response.json())
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('/api/issues', { signal: controller.signal })
+      .then(response => {
+        if (!response.ok) throw new Error('Could not load issues. Check the backend is running.')
+        return response.json()
+      })
+      .then(setIssues)
+      .catch(error => { if (error.name !== 'AbortError') setApiError(error.message) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [])
+
+  const scanArea = useCallback(async (event) => {
+    event?.preventDefault()
+    if (!scanBounds) return
+    const request = ++scanRequest.current
+    setScanId(null)
+    setAnalyzing(true)
+    setApiError('')
+    setAnalysisMessage('Finding Mapillary imagery in this area…')
+    try {
+      const response = await fetch('/api/scans', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bbox: scanBounds, limit: scanLimit }),
+      })
+      const data = await response.json()
+      if (request !== scanRequest.current) return
+      if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Could not start scan.')
+      setScanId(data.id)
+    } catch (error) {
+      if (request === scanRequest.current) { setApiError(error.message); setAnalyzing(false) }
+    }
+  }, [scanBounds, scanLimit])
+
+  useEffect(() => {
+    if (!autoScan || !scanBounds) return
+    const timer = setTimeout(() => { scanArea() }, 900)
+    return () => clearTimeout(timer)
+  }, [autoScan, scanBounds, scanArea])
+
+  useEffect(() => {
+    if (!scanId) return
+    let stopped = false
+    let timer
+    async function poll() {
+      try {
+        const response = await fetch(`/api/scans/${scanId}`)
+        if (!response.ok) throw new Error('Could not check scan progress. Reload and retry.')
+        const scan = await response.json()
+        if (stopped) return
+        await loadIssues()
+        if (stopped) return
+        if (scan.status === 'failed') {
+          setApiError(scan.error)
+          setAnalysisMessage('Scan stopped. Any saved candidates remain available.')
+          setAnalyzing(false)
+          setScanId(null)
+          return
+        }
+        setAnalysisMessage(scan.status === 'discovering'
+          ? 'Finding Mapillary imagery in this area…'
+          : `${scan.processed}/${scan.total} images checked · ${scan.detections} road-damage candidate(s) · ${scan.failed} failed · ${scan.skipped} already analyzed${scan.status === 'completed' ? ' · Scan complete' : ''}`)
+        if (['completed', 'cancelled'].includes(scan.status)) {
+          setAnalyzing(false)
+          setScanId(null)
+        } else timer = setTimeout(poll, 2000)
+      } catch (error) {
+        if (!stopped) { setApiError(error.message); setAnalyzing(false); setScanId(null) }
+      }
+    }
+    poll()
+    return () => { stopped = true; clearTimeout(timer) }
+  }, [scanId])
+
 
   useEffect(() => {
     if (selectedIssue && !dialogRef.current.open) {
@@ -159,14 +183,17 @@ function App() {
   const activeFilterCount = filterCategories.reduce((count, { key }) => count + filters[key].length, 0) + Number(hasCoordinates)
   const query = search.trim().toLowerCase()
   const filteredIssues = issues.filter(issue =>
+    (!scanBounds || (Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude) &&
+      issue.longitude >= scanBounds[0] && issue.longitude <= scanBounds[2] &&
+      issue.latitude >= scanBounds[1] && issue.latitude <= scanBounds[3])) &&
     filterCategories.every(({ key, property }) => !filters[key].length || filters[key].includes(issue[property])) &&
     (!hasCoordinates || (validCoordinates && calculateDistance(
-      Number(coordinateFilter.latitude), Number(coordinateFilter.longitude), issue.latitude, issue.longitude
+      Number(coordinateFilter.latitude), Number(coordinateFilter.longitude), issue.latitude ?? NaN, issue.longitude ?? NaN
     ) <= Number(coordinateFilter.radius))) &&
-    searchValues(issue).some(value => value.toLowerCase().includes(query))
+    searchValues(issue).some(value => String(value).toLowerCase().includes(query))
   )
   const suggestions = query ? [...new Set(filteredIssues.flatMap(searchValues))]
-    .filter(value => value.toLowerCase().includes(query)).slice(0, 8) : []
+    .filter(value => String(value).toLowerCase().includes(query)).slice(0, 8) : []
 
   function toggleFilter(key, value) {
     setFilters(previous => ({ ...previous, [key]: previous[key].includes(value)
@@ -181,20 +208,35 @@ function App() {
   }
 
   // Update an issue's review status
-  function updateReviewStatus(id, newStatus) {
-    setIssues(previousIssues =>
-      previousIssues.map(issue =>
-        issue.id === id
-          ? { ...issue, reviewStatus: newStatus }
-          : issue
-      )
-    )
+  async function updateReviewStatus(id, newStatus) {
+    setApiError('')
+    try {
+      const response = await fetch(`/api/issues/${encodeURIComponent(id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewStatus: newStatus }),
+      })
+      if (!response.ok) throw new Error('Review change could not be saved.')
+      const saved = await response.json()
+      setIssues(previous => previous.map(issue => issue.id === id ? saved : issue))
+      setSelectedIssue(previous => previous?.id === id ? saved : previous)
+    } catch (error) { setApiError(error.message) }
+  }
 
-    setSelectedIssue(previous =>
-      previous?.id === id
-        ? { ...previous, reviewStatus: newStatus }
-        : previous
-    )
+  async function saveLocation(event) {
+    event.preventDefault()
+    const fields = new FormData(event.currentTarget)
+    setApiError('')
+    try {
+      const response = await fetch(`/api/issues/${encodeURIComponent(selectedIssue.id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latitude: Number(fields.get('latitude')), longitude: Number(fields.get('longitude')) }),
+      })
+      if (!response.ok) throw new Error('Could not save location.')
+      const saved = await response.json()
+      setIssues(previous => previous.map(issue => issue.id === saved.id ? saved : issue))
+      setSelectedIssue(saved)
+      setFocusedIssue(saved)
+    } catch (error) { setApiError(error.message) }
   }
 
   // Export report
@@ -208,7 +250,8 @@ function App() {
       'Review ID',
       'Review Status',
       'Work Order ID',
-      'Work Order Status'
+      'Work Order Status', 'Confidence', 'Latitude', 'Longitude', 'Location Accuracy',
+      'Mapillary Image ID', 'Model Version', 'Capture Timestamp (ms)'
     ]
 
     const rows = filteredIssues.map(issue => [
@@ -220,7 +263,8 @@ function App() {
       issue.reviewId,
       issue.reviewStatus,
       issue.workOrderId ?? '',
-      issue.workOrderStatus
+      issue.workOrderStatus, issue.confidence, issue.latitude, issue.longitude, issue.locationAccuracy,
+      issue.sourceImageId, issue.modelVersion, issue.capturedAt
     ])
 
     const escapeCSV = value =>
@@ -274,6 +318,20 @@ function App() {
 
       {/* DASHBOARD */}
       <main id="dashboard" className="dashboard">
+        <form className="analysis-form" onSubmit={scanArea}>
+          <span>Find road damage in the visible map area</span>
+          <label><input type="checkbox" checked={autoScan} onChange={event => setAutoScan(event.target.checked)} /> Scan automatically as map moves</label>
+          <label>Images per scan
+            <select value={scanLimit} disabled={analyzing} onChange={event => setScanLimit(Number(event.target.value))}>
+              {[5, 10, 20, 30].map(limit => <option key={limit} value={limit}>{limit}</option>)}
+            </select>
+          </label>
+          <button disabled={!scanBounds}>{analyzing ? 'Scan current area instead' : 'Scan map area'}</button>
+          <small>Pan or zoom, then pause to scan. Dashboard results follow the visible area; earlier issues stay saved.</small>
+        </form>
+        {loading && <p role="status">Loading issues…</p>}
+        {apiError && <p role="alert">{apiError}</p>}
+        {analysisMessage && <p role="status">{analysisMessage}</p>}
 
         {/* HEADER */}
         <div className="dashboard-header">
@@ -399,16 +457,17 @@ function App() {
             
           {/* INTERACTIVE MAP */}
             <IssueMap
-              issues={filteredIssues}
+              issues={filteredIssues.filter(issue => Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude))}
               focusedIssue={focusedIssue}
               onFocusIssue={focusOnIssue}
               onSelectIssue={setSelectedIssue}
               view={mapView}
+              onBoundsChange={handleMapBoundsChange}
             />
 
 
             <div className="map-footer">
-              <span>Issue locations · Seattle, WA</span>
+              <span>Approximate camera locations · Reviewer adjustments remain estimates</span>
               <span>{filteredIssues.length} visible issues</span>
             </div>
 
@@ -443,7 +502,7 @@ function App() {
                       <span className="priority-name">{issue.location}</span>
                     </span>
 
-                    <strong>{issue.priorityScore}</strong>
+                    <strong>{issue.priorityScore ?? 'Unassigned'}</strong>
                   </span>
 
                   <span className="issue-id">
@@ -451,7 +510,8 @@ function App() {
                   </span>
 
                   <span className="issue-description">
-                    {issue.description}
+                    {issue.type} · Model confidence: {(issue.confidence * 100).toFixed(1)}%
+                    {issue.duplicateIssueIds?.length > 0 && ` · ${issue.duplicateIssueIds.length + 1} matching detections`}
                   </span>
 
                   <span className="status-row">
@@ -468,7 +528,7 @@ function App() {
                     <span
                       className={`progress-fill ${issue.priority.toLowerCase()}`}
                       style={{
-                        width: `${issue.priorityScore}%`
+                        width: `${issue.priorityScore ?? 0}%`
                       }}
                     ></span>
                   </span>
@@ -571,6 +631,22 @@ function App() {
             <h2 id="issue-dialog-title">{selectedIssue.type}</h2>
             <p>{selectedIssue.location}</p>
 
+            {selectedIssue.imageUrl && (
+              <div>
+                <div className="evidence-image">
+                  <img src={selectedIssue.imageUrl} alt="Mapillary evidence for review" />
+                  <svg viewBox={`0 0 ${selectedIssue.imageWidth} ${selectedIssue.imageHeight}`} aria-label="Candidate defect bounding box">
+                    <rect x={selectedIssue.bbox[0]} y={selectedIssue.bbox[1]}
+                      width={selectedIssue.bbox[2] - selectedIssue.bbox[0]}
+                      height={selectedIssue.bbox[3] - selectedIssue.bbox[1]}
+                      fill="none" stroke="#ff3b30" strokeWidth="3" />
+                  </svg>
+                </div>
+                <p>Model confidence: {(selectedIssue.confidence * 100).toFixed(1)}% · Location: {selectedIssue.locationAccuracy}</p>
+                <a href={`https://www.mapillary.com/app/?pKey=${selectedIssue.sourceImageId}`} target="_blank" rel="noreferrer">View source on Mapillary</a>
+                <p>Mapillary imagery · Review evidence before verifying.</p>
+              </div>
+            )}
             <hr />
 
             <p>{selectedIssue.description}</p>
@@ -581,7 +657,7 @@ function App() {
               </p>
 
               <p>
-                <strong>Priority Score:</strong> {selectedIssue.priorityScore}
+                <strong>Priority Score:</strong> {selectedIssue.priorityScore ?? 'Unassigned'}
               </p>
 
               <p>
@@ -597,6 +673,12 @@ function App() {
               </p>
             </div>
 
+            <form key={selectedIssue.id} onSubmit={saveLocation} className="analysis-form">
+              <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required defaultValue={selectedIssue.latitude ?? ''} /></label>
+              <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" required defaultValue={selectedIssue.longitude ?? ''} /></label>
+              <button>Save estimated location</button>
+            </form>
+            {apiError && <p role="alert">{apiError}</p>}
             <label htmlFor="review-status">
               Review Status
             </label>
