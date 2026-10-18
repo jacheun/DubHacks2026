@@ -9,6 +9,7 @@ from threading import Event, Lock
 from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
+from postal import lookup_zip
 from discovery import discover_images
 from deduplication import deduplicate, same_defect
 
@@ -39,6 +40,8 @@ LOCK = Lock()
 SCAN_LOCK = Lock()
 CANCELLATIONS = {}
 WORKER = ThreadPoolExecutor(max_workers=1)
+POSTAL_WORKER = ThreadPoolExecutor(max_workers=1)
+POSTAL_LOCK = Lock()
 app = FastAPI(title='GroundworkAI')
 app.mount('/api/images', StaticFiles(directory=IMAGES), name='images')
 
@@ -71,7 +74,18 @@ class AnalysisRequest(BaseModel):
     confidence: float = Field(default=0.35, gt=0, le=1)
 
 
+def report_metadata(issue):
+    issue = dict(issue)
+    if issue.get('priority') not in {'Low', 'Medium', 'Critical'}:
+        issue['priority'] = 'Critical' if issue.get('priority') == 'High' else 'Unassigned'
+    issue.setdefault('zipCode', '')
+    issue.pop('priorityScore', None)
+    return issue
+
+
 class ReviewRequest(BaseModel):
+    priority: str | None = Field(default=None, pattern=r'^(Unassigned|Low|Medium|Critical)$')
+    zipCode: str | None = Field(default=None, pattern=r'^(?:[0-9]{5}(?:-[0-9]{4})?)?$')
     reviewStatus: str | None = Field(default=None, pattern=r'^(Pending|Under Review|Verified|Rejected)$')
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
@@ -89,7 +103,7 @@ class WorkOrderUpdate(BaseModel):
 
 ROLES = {'reviewer', 'coordinator', 'crew'}
 ISSUE_FIELDS = (
-    'type', 'location', 'neighborhood', 'latitude', 'longitude', 'priority', 'priorityScore',
+    'type', 'location', 'neighborhood', 'zipCode', 'latitude', 'longitude', 'priority',
     'description', 'confidence', 'imageUrl', 'imageWidth', 'imageHeight', 'bbox',
     'reviewStatus', 'sourceImageId', 'locationAccuracy',
 )
@@ -125,7 +139,32 @@ def next_work_order_id(db):
 @app.get('/api/issues')
 def issues():
     with connection() as db:
-        return deduplicate([json.loads(row[0]) for row in db.execute('SELECT data FROM issues ORDER BY id')])
+        reports = [report_metadata(issue) for issue in deduplicate([json.loads(row[0]) for row in db.execute('SELECT data FROM issues ORDER BY id')])]
+    load_dotenv(ROOT / '.env')
+    load_dotenv(Path(__file__).parent / '.env')
+    if os.getenv('GEOCODING_API_KEY') and any(not issue.get('zipCode') for issue in reports) and POSTAL_LOCK.acquire(blocking=False):
+        POSTAL_WORKER.submit(fill_missing_zip_codes, reports)
+    return reports
+
+
+def fill_missing_zip_codes(reports):
+    try:
+        for issue in reports:
+            if issue.get('zipCode'):
+                continue
+            code = lookup_zip(issue.get('latitude'), issue.get('longitude'))
+            if not code:
+                continue
+            with connection() as db:
+                row = db.execute('SELECT data FROM issues WHERE id=?', (issue['id'],)).fetchone()
+                if not row:
+                    continue
+                current = json.loads(row[0])
+                if not current.get('zipCode') and all(current.get(key) == issue.get(key) for key in ['latitude', 'longitude']):
+                    current['zipCode'] = code
+                    db.execute('UPDATE issues SET data=? WHERE id=?', (json.dumps(current), issue['id']))
+    finally:
+        POSTAL_LOCK.release()
 
 
 @app.patch('/api/issues/{issue_id}')
@@ -136,11 +175,15 @@ def update_issue(issue_id: str, update: ReviewRequest):
         row = db.execute('SELECT data FROM issues WHERE id=?', (issue_id,)).fetchone()
         if not row:
             raise HTTPException(404, 'Issue not found')
-        issue = json.loads(row[0])
+        issue = report_metadata(json.loads(row[0]))
+        moved = update.latitude is not None and (issue.get('latitude'), issue.get('longitude')) != (update.latitude, update.longitude)
         issue.update(update.model_dump(exclude_none=True))
-        if update.latitude is not None:
+        if moved:
             issue['locationAccuracy'] = 'reviewer_adjusted'
+            issue['zipCode'] = ''
         db.execute('UPDATE issues SET data=? WHERE id=?', (json.dumps(issue), issue_id))
+    if moved and POSTAL_LOCK.acquire(blocking=False):
+        POSTAL_WORKER.submit(fill_missing_zip_codes, [issue])
     return issue
 
 
@@ -264,7 +307,7 @@ def analyze(body: AnalysisRequest):
                     'imageWidth': report['image_width'], 'imageHeight': report['image_height'],
                     'imageUrl': f'/api/images/{body.imageId}/original.jpg',
                     'sourceImageId': body.imageId, 'capturedAt': report['captured_at'],
-                    'modelVersion': version, 'priority': 'Unassigned', 'priorityScore': None,
+                    'modelVersion': version, 'priority': 'Unassigned', 'zipCode': lookup_zip(location.get('latitude'), location.get('longitude')),
                     'reviewId': issue_id, 'reviewStatus': 'Pending',
                     'workOrderId': None, 'workOrderStatus': 'Not Created',
                 }

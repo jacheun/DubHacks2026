@@ -18,6 +18,9 @@ class ScanTests(unittest.TestCase):
         self.token_patch = patch.dict('os.environ', {'MAPILLARY_TOKEN': 'test'})
         self.token_patch.start()
         self.addCleanup(self.token_patch.stop)
+        self.postal_patch = patch.object(api, 'lookup_zip', return_value='')
+        self.postal_patch.start()
+        self.addCleanup(self.postal_patch.stop)
 
     def report(self):
         return {
@@ -34,6 +37,37 @@ class ScanTests(unittest.TestCase):
         return {'id': 'test', 'status': 'discovering', 'discovered': 0,
                 'total': 0, 'processed': 0, 'failed': 0, 'skipped': 0,
                 'detections': 0, 'error': None}
+
+    def test_report_metadata_persists_and_validates(self):
+        from pydantic import ValidationError
+        with api.connection() as db:
+            db.execute('INSERT INTO issues VALUES (?, ?)', ('metadata-test', json.dumps({
+                'id': 'metadata-test', 'priority': 'Unassigned', 'type': 'Pothole',
+                'latitude': 47.6065, 'longitude': -122.3285,
+            })))
+        self.assertEqual(api.issues()[0]['priority'], 'Unassigned')
+        api.update_issue('metadata-test', api.ReviewRequest(priority='Critical', zipCode='98101'))
+        saved = api.issues()[0]
+        self.assertEqual((saved['priority'], saved['zipCode']), ('Critical', '98101'))
+        self.assertEqual(saved['latitude'], 47.6065)
+        for invalid in [{'priority': 'Urgent'}, {'zipCode': 'Seattle'}]:
+            with self.assertRaises(ValidationError):
+                api.ReviewRequest(**invalid)
+
+    def test_metadata_save_does_not_wait_for_geocoder_or_clear_existing_zip(self):
+        with api.connection() as db:
+            db.execute('INSERT INTO issues VALUES (?, ?)', ('save-test', json.dumps({
+                'id': 'save-test', 'priority': 'Unassigned', 'type': 'Pothole',
+                'latitude': 47.6, 'longitude': -122.3, 'zipCode': '98101',
+            })))
+        with patch.object(api, 'lookup_zip', side_effect=AssertionError('Save must not geocode')):
+            saved = api.update_issue('save-test', api.ReviewRequest(
+                priority='Medium', latitude=47.6, longitude=-122.3))
+        self.assertEqual(saved['priority'], 'Medium')
+        self.assertEqual(saved['zipCode'], '98101')
+        with api.connection() as db:
+            stored = json.loads(db.execute('SELECT data FROM issues WHERE id=?', ('save-test',)).fetchone()[0])
+        self.assertEqual(stored['priority'], 'Medium')
 
     def test_discovery_to_issues_and_repeat_preserves_review(self):
         with patch.object(api, 'discover_images', return_value=['123', '456']), \
