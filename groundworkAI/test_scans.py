@@ -68,6 +68,15 @@ class ScanTests(unittest.TestCase):
             self.assertEqual(saved['latitude'], 48)
             self.assertEqual(len(saved['observations']), 1)
 
+    def test_network_errors_never_publish_credentials(self):
+        import requests
+        with patch.object(api, 'discover_images', side_effect=requests.ConnectionError('https://tiles.example/?access_token=secret-test-value')):
+            scan = self.scan()
+            api.run_scan(scan, api.ScanRequest())
+            self.assertEqual(scan['status'], 'failed')
+            self.assertNotIn('secret-test-value', api.get_scan('test')['error'])
+            self.assertNotIn('access_token', api.get_scan('test')['error'])
+
     def test_no_coverage_completes_without_issues(self):
         with patch.object(api, 'discover_images', return_value=[]):
             scan = self.scan()

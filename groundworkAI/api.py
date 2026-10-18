@@ -218,9 +218,16 @@ def run_scan(scan, body):
             scan['processed'] += 1
             save_scan(scan)
         scan['status'] = 'cancelled' if cancelled.is_set() else 'completed'
-    except (ValueError, OSError) as error:
+    except requests.RequestException:
         scan['status'] = 'failed'
-        scan['error'] = str(error)
+        scan['error'] = 'Mapillary network request failed. Check backend connectivity and retry.'
+    except ValueError as error:
+        scan['status'] = 'failed'
+        message = str(error)
+        scan['error'] = message if 'access_token' not in message.lower() and 'https://' not in message.lower() else 'Imagery processing failed.'
+    except OSError:
+        scan['status'] = 'failed'
+        scan['error'] = 'Could not read or write imagery. Check backend storage and retry.'
     except Exception:
         # Requests can include credentials in their exception URLs.
         scan['status'] = 'failed'
