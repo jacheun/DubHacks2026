@@ -63,6 +63,30 @@ test('unreachable backend returns a useful error', async () => {
 })
 
 
+test('proxy forwards the person using the app', async () => {
+  process.env.API_BACKEND_URL = 'https://backend.example'
+  const originalFetch = globalThis.fetch
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url.pathname, '/api/work-orders')
+      assert.equal(options.headers['x-groundwork-role'], 'coordinator')
+      assert.equal(options.headers['x-groundwork-name'], 'Jordan Hale')
+      return Response.json({ id: 'WO-001' }, { status: 201 })
+    }
+    const res = response()
+    await handler({
+      url: '/api/work-orders', method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-groundwork-role': 'coordinator',
+        'x-groundwork-name': 'Jordan Hale',
+      },
+      body: { issueId: 'issue-1', assignedTo: 'Alex Rivera' },
+    }, res)
+    assert.equal(res.code, 201)
+  } finally { globalThis.fetch = originalFetch }
+})
+
 test('explicit rewrite forwards nested scan status and removes routing parameter', async () => {
   process.env.API_BACKEND_URL='https://backend.example'
   const originalFetch=globalThis.fetch

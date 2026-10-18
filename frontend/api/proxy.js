@@ -14,7 +14,9 @@ export default async function handler(request, response) {
     incoming.searchParams.delete('__backend_path')
     target.search = incoming.searchParams.toString()
     const headers = {}
-    if (request.headers['content-type']) headers['content-type'] = request.headers['content-type']
+    for (const name of ['content-type', 'x-groundwork-role', 'x-groundwork-name']) {
+      if (request.headers[name]) headers[name] = request.headers[name]
+    }
     const hasBody = !['GET', 'HEAD'].includes(request.method)
     const body = hasBody && request.body != null
       ? (typeof request.body === 'string' || Buffer.isBuffer(request.body) ? request.body : JSON.stringify(request.body))
