@@ -369,9 +369,7 @@ function App() {
         {/* HEADER */}
         <div className="dashboard-header">
           <div>
-            <p className="eyebrow">
-              OPERATIONS · SEATTLE, WA
-            </p>
+            <p className="dashboard-location">Seattle, WA</p>
 
             <h1>Road Condition Overview</h1>
 
