@@ -82,3 +82,37 @@ Do not run this on port 8000 while another local backend is listening there.
 - `/api/*` gives 502: check Render health, startup logs, and backend URL.
 - Render health gives 503: ensure the selected `best.pt` was committed and bundled.
 - Issues disappear after redeploy: verify the persistent disk and data path.
+
+
+## Free demo: Vercel + Cloudflare Tunnel to your Mac
+
+The same Vercel API bridge works with a temporary Cloudflare Quick Tunnel.
+No Render service, Oracle VM, or GPU is needed. Run the backend locally and keep
+both it and the tunnel running while demonstrating the app.
+
+```sh
+# Terminal 1, from the project root:
+source .venv/bin/activate
+python -m uvicorn api:app --app-dir groundworkAI --reload --port 8000
+
+# Terminal 2, after installing cloudflared with Homebrew:
+npm run tunnel
+```
+
+Use the HTTPS `trycloudflare.com` origin printed by cloudflared as Vercel's
+`API_BACKEND_URL` environment value (no `/api` suffix). Select the applicable
+Preview/Production environments and redeploy. Vercel must deploy this branch's
+frontend with Root Directory `frontend` so its API bridge is included.
+
+Test `https://YOUR-TUNNEL.trycloudflare.com/api/health`, then the Vercel site's
+`/api/health`. Both should return `status: ok`. Use a normal browser, with no
+client-side Mapillary tokens. Anyone with the tunnel URL can access this demo API.
+
+Leave the Mac awake, lid open, and connected to the internet. To prevent idle
+sleep while tunneling, run `caffeinate -i npm run tunnel` instead of `npm run tunnel`.
+Stop with Control-C. The tunnel URL changes when you restart it; update Vercel's
+environment variable and redeploy each time. A frontend redeploy alone does not
+require restarting the tunnel. SQLite and evidence remain on your local disk.
+
+Cloudflare Quick Tunnels are temporary development URLs without an uptime
+commitment: https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/

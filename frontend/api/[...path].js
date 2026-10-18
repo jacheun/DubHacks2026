@@ -26,6 +26,6 @@ export default async function handler(request, response) {
     if (request.method === 'HEAD') return response.end()
     return response.send(Buffer.from(await upstream.arrayBuffer()))
   } catch {
-    return response.status(502).json({ detail: 'Backend unavailable. Check the Render service and API_BACKEND_URL.' })
+    return response.status(502).json({ detail: 'Backend unavailable. Check the backend or tunnel and API_BACKEND_URL.' })
   }
 }
