@@ -1,6 +1,8 @@
 import { readApiJson } from './api'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import IssueMap from './components/IssueMap'
+import WorkOrders from './components/WorkOrders'
+import { CREW, PEOPLE, actorHeaders, loadPerson, savePerson } from './people'
 import './App.css'
 
 const filterCategories = [
@@ -31,10 +33,26 @@ function calculateDistance(latitude, longitude, issueLatitude, issueLongitude) {
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, a)))
 }
 
+function failureMessage(data, fallback) {
+  return typeof data?.detail === 'string' ? data.detail : fallback
+}
+
+function workBadgeClass(status) {
+  return `work-badge ${String(status).toLowerCase().replace(/\s+/g, '-')}`
+}
+
 function App() {
+  const [person, setPerson] = useState(loadPerson)
+  const [screen, setScreen] = useState(() => (loadPerson().role === 'crew' ? 'orders' : 'dashboard'))
+  const [workOrders, setWorkOrders] = useState([])
+  const [ordersError, setOrdersError] = useState('')
+  const [orderFocus, setOrderFocus] = useState(null)
+  const [creatingOrder, setCreatingOrder] = useState(false)
+  const [updatingOrderId, setUpdatingOrderId] = useState('')
   const [activeSection, setActiveSection] = useState('inspection-map')
 
   useEffect(() => {
+    if (screen !== 'dashboard') return undefined
     const sections = ['inspection-map', 'priorities', 'issues']
     let frame = 0
     function updateSection() {
@@ -61,7 +79,7 @@ function App() {
       window.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', onScroll)
     }
-  }, [])
+  }, [screen])
 
   const [issues, setIssues] = useState([])
   const [filterOpen, setFilterOpen] = useState(false)
@@ -128,10 +146,42 @@ function App() {
   }, [scanBounds, scanLimit])
 
   useEffect(() => {
-    if (!autoScan || !scanBounds) return
+    if (screen !== 'dashboard' || person.role === 'crew' || !autoScan || !scanBounds) return undefined
     const timer = setTimeout(() => { scanArea() }, 900)
     return () => clearTimeout(timer)
-  }, [autoScan, scanBounds, scanArea])
+  }, [screen, person.role, autoScan, scanBounds, scanArea])
+
+  useEffect(() => {
+    let stopped = false
+    let seen = ''
+    async function load() {
+      try {
+        const response = await fetch('/api/work-orders', { headers: actorHeaders(person, false) })
+        const data = await readApiJson(response)
+        if (!response.ok) throw new Error(failureMessage(data, 'Could not load work orders.'))
+        if (!Array.isArray(data)) throw new Error('Could not load work orders.')
+        if (stopped) return
+        setWorkOrders(data)
+        setOrdersError('')
+        const signature = data.map(order => `${order.id}:${order.status}`).join('|')
+        if (signature === seen) return
+        seen = signature
+        const issuesResponse = await fetch('/api/issues')
+        if (!issuesResponse.ok || stopped) return
+        const nextIssues = await readApiJson(issuesResponse)
+        if (!Array.isArray(nextIssues) || stopped) return
+        setIssues(nextIssues)
+        setSelectedIssue(previous => previous
+          ? nextIssues.find(issue => issue.id === previous.id) ?? previous
+          : previous)
+      } catch (error) {
+        if (!stopped) setOrdersError(error.message)
+      }
+    }
+    load()
+    const timer = setInterval(load, 4000)
+    return () => { stopped = true; clearInterval(timer) }
+  }, [person])
 
   useEffect(() => {
     if (!scanId) return
@@ -201,6 +251,24 @@ function App() {
       ? previous[key].filter(item => item !== value) : [...previous[key], value] }))
   }
 
+  function choosePerson(next) {
+    savePerson(next)
+    setPerson(next)
+    setScreen(next.role === 'crew' ? 'orders' : 'dashboard')
+    setSelectedIssue(null)
+    setApiError('')
+    setOrdersError('')
+  }
+
+  function showDashboard(event, id) {
+    if (screen === 'dashboard') return
+    event.preventDefault()
+    setScreen('dashboard')
+    window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 0)
+  }
+
   function focusOnIssue(issue) {
     setFocusedIssue({ ...issue })
     document.getElementById('inspection-map')?.scrollIntoView({
@@ -238,6 +306,61 @@ function App() {
       setSelectedIssue(saved)
       setFocusedIssue(saved)
     } catch (error) { setApiError(error.message) }
+  }
+
+  async function createWorkOrder(event) {
+    event.preventDefault()
+    const fields = new FormData(event.currentTarget)
+    setCreatingOrder(true)
+    setApiError('')
+    try {
+      const response = await fetch('/api/work-orders', {
+        method: 'POST',
+        headers: actorHeaders(person),
+        body: JSON.stringify({
+          issueId: selectedIssue.id,
+          notes: fields.get('notes') ?? '',
+          assignedTo: fields.get('assignedTo'),
+        }),
+      })
+      const saved = await readApiJson(response)
+      if (!response.ok) throw new Error(failureMessage(saved, 'Could not create the work order.'))
+      setWorkOrders(previous => [saved, ...previous.filter(order => order.id !== saved.id)])
+      const apply = issue => issue.id === saved.issueId
+        ? { ...issue, workOrderId: saved.id, workOrderStatus: saved.status }
+        : issue
+      setIssues(previous => previous.map(apply))
+      setSelectedIssue(previous => previous ? apply(previous) : previous)
+    } catch (error) {
+      setApiError(error.message)
+    } finally {
+      setCreatingOrder(false)
+    }
+  }
+
+  async function updateWorkOrderStatus(order, status) {
+    setUpdatingOrderId(order.id)
+    setOrdersError('')
+    try {
+      const response = await fetch(`/api/work-orders/${encodeURIComponent(order.id)}`, {
+        method: 'PATCH',
+        headers: actorHeaders(person),
+        body: JSON.stringify({ status }),
+      })
+      const saved = await readApiJson(response)
+      if (!response.ok) throw new Error(failureMessage(saved, 'Could not update the work order.'))
+      setWorkOrders(previous => previous.map(item => item.id === saved.id ? saved : item))
+      setIssues(previous => previous.map(issue => issue.id === saved.issueId
+        ? { ...issue, workOrderStatus: saved.status }
+        : issue))
+      setSelectedIssue(previous => previous?.id === saved.issueId
+        ? { ...previous, workOrderStatus: saved.status }
+        : previous)
+    } catch (error) {
+      setOrdersError(error.message)
+    } finally {
+      setUpdatingOrderId('')
+    }
   }
 
   // Export report
@@ -290,6 +413,10 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
+  const selectedOrder = selectedIssue
+    ? workOrders.find(order => order.id === selectedIssue.workOrderId || order.issueId === selectedIssue.id)
+    : null
+
   return (
     <div className="app" data-theme="sage">
 
@@ -300,25 +427,65 @@ function App() {
 
         </div>
 
+        <div className="person-switcher">
+          <p className="eyebrow">Using the app as</p>
+          <strong>{person.name}</strong>
+          <span>{person.title}</span>
+          <div role="group" aria-label="Choose who is using Groundwork">
+            {PEOPLE.map(option => (
+              <button type="button" key={option.id} aria-pressed={option.id === person.id}
+                onClick={() => choosePerson(option)}>
+                <span>{option.name}</span>
+                <small>{option.title}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="sidebar-links">
-          <a href="#inspection-map" aria-current={activeSection === 'inspection-map' ? 'location' : undefined}>Inspection Map</a>
-          <a href="#priorities" aria-current={activeSection === 'priorities' ? 'location' : undefined}>Repair Priorities</a>
-          <a href="#issues" aria-current={activeSection === 'issues' ? 'location' : undefined}>Issue Reports</a>
+          {person.role !== 'crew' && (
+            <>
+              <a href="#inspection-map" onClick={event => showDashboard(event, 'inspection-map')}
+                aria-current={screen === 'dashboard' && activeSection === 'inspection-map' ? 'location' : undefined}>Inspection Map</a>
+              <a href="#priorities" onClick={event => showDashboard(event, 'priorities')}
+                aria-current={screen === 'dashboard' && activeSection === 'priorities' ? 'location' : undefined}>Repair Priorities</a>
+              <a href="#issues" onClick={event => showDashboard(event, 'issues')}
+                aria-current={screen === 'dashboard' && activeSection === 'issues' ? 'location' : undefined}>Issue Reports</a>
+            </>
+          )}
+          {person.role !== 'reviewer' && (
+            <button type="button" aria-current={screen === 'orders' ? 'page' : undefined}
+              onClick={() => setScreen('orders')}>Work Orders</button>
+          )}
         </div>
         <div className="nav-actions">
 
 
-          <button
-            className="export-button"
-            onClick={exportReport}
-          >
-            ↓ Export Report
-          </button>
+          {screen === 'dashboard' && person.role !== 'crew' && (
+            <button
+              className="export-button"
+              onClick={exportReport}
+            >
+              ↓ Export Report
+            </button>
+          )}
         </div>
       </nav>
 
       {/* DASHBOARD */}
       <main id="dashboard" className="dashboard">
+        {screen === 'orders' ? (
+          <WorkOrders
+            key={`${person.id}:${orderFocus ?? ''}`}
+            person={person}
+            orders={workOrders}
+            error={ordersError}
+            focusId={orderFocus}
+            updatingId={updatingOrderId}
+            onUpdateStatus={updateWorkOrderStatus}
+          />
+        ) : (
+        <>
         <section className="scan-console" aria-labelledby="scan-console-title" aria-busy={analyzing}>
           <form className="scan-toolbar" onSubmit={scanArea}>
             <div className="scan-heading">
@@ -377,6 +544,7 @@ function App() {
               AI-Powered Road and Sidewalk Inspection
               Within Seattle City Limits
             </p>
+            <p className="role-banner">{person.summary}</p>
           </div>
 
           <div className="dashboard-filters">
@@ -550,7 +718,7 @@ function App() {
                       {issue.reviewStatus}
                     </span>
 
-                    <span className="work-badge">
+                    <span className={workBadgeClass(issue.workOrderStatus)}>
                       {issue.workOrderStatus}
                     </span>
                   </span>
@@ -611,7 +779,7 @@ function App() {
                     {issue.reviewStatus}
                   </span>
 
-                  <span className="work-badge">
+                  <span className={workBadgeClass(issue.workOrderStatus)}>
                     {issue.workOrderStatus}
                   </span>
                 </span>
@@ -630,6 +798,8 @@ function App() {
 
           </div>
         </div>
+        </>
+        )}
       </main>
 
       {/* ISSUE DETAILS MODAL */}
@@ -702,30 +872,76 @@ function App() {
               <p>
                 <strong>Work Order Status:</strong> {selectedIssue.workOrderStatus}
               </p>
+              {selectedOrder && (
+                <>
+                  <p><strong>Assigned to:</strong> {selectedOrder.assignedTo}</p>
+                  <p><strong>Created by:</strong> {selectedOrder.createdBy}</p>
+                  {selectedOrder.notes && <p><strong>Notes:</strong> {selectedOrder.notes}</p>}
+                </>
+              )}
             </div>
 
-            <form key={selectedIssue.id} onSubmit={saveLocation} className="analysis-form">
-              <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required defaultValue={selectedIssue.latitude ?? ''} /></label>
-              <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" required defaultValue={selectedIssue.longitude ?? ''} /></label>
-              <button>Save estimated location</button>
-            </form>
+            {person.role === 'reviewer' ? (
+              <form key={selectedIssue.id} onSubmit={saveLocation} className="analysis-form">
+                <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required defaultValue={selectedIssue.latitude ?? ''} /></label>
+                <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" required defaultValue={selectedIssue.longitude ?? ''} /></label>
+                <button>Save estimated location</button>
+              </form>
+            ) : (
+              <p>
+                <strong>Estimated location:</strong>{' '}
+                {Number.isFinite(selectedIssue.latitude) && Number.isFinite(selectedIssue.longitude)
+                  ? `${selectedIssue.latitude}, ${selectedIssue.longitude}`
+                  : 'Unavailable'}
+              </p>
+            )}
             {apiError && <p role="alert">{apiError}</p>}
-            <label htmlFor="review-status">
-              Review Status
-            </label>
+            {person.role === 'reviewer' ? (
+              <>
+                <label htmlFor="review-status">
+                  Review Status
+                </label>
 
-            <select
-              id="review-status"
-              value={selectedIssue.reviewStatus}
-              onChange={(e) =>
-                updateReviewStatus(selectedIssue.id, e.target.value)
-              }
-            >
-              <option value="Pending">Pending</option>
-              <option value="Under Review">Under Review</option>
-              <option value="Verified">Verified</option>
-              <option value="Rejected">Rejected</option>
-            </select>
+                <select
+                  id="review-status"
+                  value={selectedIssue.reviewStatus}
+                  onChange={(e) =>
+                    updateReviewStatus(selectedIssue.id, e.target.value)
+                  }
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="Under Review">Under Review</option>
+                  <option value="Verified">Verified</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </>
+            ) : (
+              <p><strong>Review Status:</strong> {selectedIssue.reviewStatus}</p>
+            )}
+            {person.role === 'coordinator' && selectedIssue.workOrderId && (
+              <button type="button" className="export-button work-order-link" onClick={() => {
+                setOrderFocus(selectedIssue.workOrderId)
+                setScreen('orders')
+                dialogRef.current?.close()
+              }}>View work order</button>
+            )}
+            {person.role === 'coordinator' && !selectedIssue.workOrderId && (
+              selectedIssue.reviewStatus === 'Verified' ? (
+                <form key={selectedIssue.id} className="work-order-form" onSubmit={createWorkOrder}>
+                  <label>Assign to
+                    <select name="assignedTo" defaultValue={CREW[0]?.name || ''} required>
+                      {CREW.map(member => <option key={member.id} value={member.name}>{member.name}</option>)}
+                    </select>
+                  </label>
+                  <label>Notes
+                    <textarea name="notes" maxLength={500} rows={3} placeholder="What should the crew repair?" />
+                  </label>
+                  <button disabled={creatingOrder}>{creatingOrder ? 'Creating…' : 'Create work order'}</button>
+                </form>
+              ) : (
+                <p className="role-note">A reviewer must mark this issue Verified before you can create a work order.</p>
+              )
+            )}
 
         </dialog>
       )}

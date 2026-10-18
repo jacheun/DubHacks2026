@@ -437,3 +437,69 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
 }
 
 .dashboard-location { margin-bottom: 10px; color: #303a30; font-size: 16px; font-weight: 500; letter-spacing: normal; }
+
+/* Keep repair-priority content aligned when labels and IDs wrap. */
+.priority-list { align-items: stretch; }
+.priority-item { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; min-width: 0; }
+.priority-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.priority-location { min-width: 0; align-items: flex-start; }
+.priority-dot { margin-top: 6px; }
+.priority-name { min-width: 0; line-height: 1.5; overflow-wrap: anywhere; }
+
+.person-switcher { display: grid; gap: 6px; padding: 14px; border-radius: 16px; background: #e7eee0; }
+.person-switcher .eyebrow { margin: 0; }
+.person-switcher > strong { font-size: 14px; }
+.person-switcher > span { font-size: 11px; color: #667560; }
+.person-switcher div { display: grid; gap: 6px; margin-top: 8px; }
+.person-switcher button {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  width: 100%; text-align: left; border: 0; border-radius: 10px;
+  background: transparent; color: #52614c; padding: 8px 10px; font-size: 12px;
+}
+.person-switcher button[aria-pressed="true"] { background: #fff; color: #405339; font-weight: 700; }
+.person-switcher button small { font-size: 10px; color: #7b897b; font-weight: 500; }
+.sidebar-links button {
+  display: flex; justify-content: space-between; width: 100%; text-align: left;
+  padding: 13px 16px; border: 0; border-radius: 12px; background: transparent;
+  font-size: 13px; color: #69725f;
+}
+.sidebar-links button[aria-current="page"] { background: #e1e8d7; color: #405339; font-weight: 700; }
+.sidebar-links button:hover { background: #e6ebdd; }
+.role-banner { margin-top: 8px; color: #50664b; font-size: 13px; line-height: 1.6; }
+.role-note { margin-top: 12px; color: #6d5b32; background: #f7f3e8; border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+.modal { overflow: auto; }
+.work-order-link { margin-top: 16px; }
+.work-order-form { display: grid; gap: 12px; margin-top: 16px; }
+.work-order-form label { display: grid; gap: 6px; }
+.work-order-form textarea, .work-order-form select, .work-order-form button { width: 100%; }
+.work-order-form textarea { border: 1px solid #d7e0d7; border-radius: 12px; padding: 11px 14px; resize: vertical; color: #354c3f; }
+.work-order-form button { border: 0; border-radius: 12px; padding: 12px 16px; background: #50664b; color: #fff; font-weight: 650; }
+.work-order-form button:disabled { opacity: .6; cursor: wait; }
+.work-orders { display: grid; gap: 22px; }
+.work-order-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.work-order-layout { display: grid; grid-template-columns: minmax(240px, 340px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.work-order-list, .work-order-detail { background: #f7f8f3; border-radius: 18px; }
+.work-order-list { display: grid; align-content: start; padding: 8px; }
+.work-order-card { display: grid; gap: 4px; width: 100%; text-align: left; border: 0; border-radius: 12px; background: transparent; padding: 14px; }
+.work-order-card[aria-pressed="true"] { background: #fff; }
+.work-order-card strong { font-size: 14px; color: #303a30; }
+.work-order-card span, .work-order-detail p { color: #5f6d5c; font-size: 12px; line-height: 1.5; }
+.work-order-detail { padding: 22px; display: grid; gap: 10px; }
+.work-order-detail h2 { font-size: 28px; }
+.work-order-detail a { color: #405339; }
+.work-order-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.work-order-actions button { border: 1px solid #d5dfd0; border-radius: 999px; background: #fff; padding: 8px 12px; font-size: 12px; color: #405339; }
+.work-order-actions button[aria-pressed="true"] { background: #50664b; border-color: #50664b; color: #fff; }
+.work-order-actions button:disabled { opacity: .6; cursor: default; }
+.work-badge.open { background: #f3ecdf; color: #8a6232; }
+.work-badge.in-progress { background: #e7eef8; color: #3d5f86; }
+.work-badge.completed { background: #e5f2e6; color: #2f6b45; }
+@media (max-width: 800px) {
+  .work-order-layout { grid-template-columns: 1fr; }
+}
+.priority-title strong { flex-shrink: 0; font-size: 13px; line-height: 1.5; text-align: right; }
+.priority-item .issue-id { margin: 6px 0 8px 16px; min-width: 0; overflow-wrap: anywhere; line-height: 1.6; }
+.priority-item .issue-description,
+.priority-item .status-row,
+.priority-item .progress-track { margin-left: 16px; }
+.priority-item .issue-description { text-align: left; overflow-wrap: anywhere; }

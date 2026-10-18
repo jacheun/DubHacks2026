@@ -1,5 +1,6 @@
 """Local dashboard API. Run: uvicorn api:app --app-dir groundworkAI"""
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import hashlib
 import json
 import sqlite3
@@ -13,7 +14,7 @@ from deduplication import deduplicate, same_defect
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import os
@@ -58,6 +59,7 @@ def connection():
         db.execute('CREATE TABLE IF NOT EXISTS issues (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
         db.execute('CREATE TABLE IF NOT EXISTS analyses (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
         db.execute('CREATE TABLE IF NOT EXISTS scans (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
+        db.execute('CREATE TABLE IF NOT EXISTS work_orders (id TEXT PRIMARY KEY, data TEXT NOT NULL)')
         with db:
             yield db
     finally:
@@ -73,6 +75,51 @@ class ReviewRequest(BaseModel):
     reviewStatus: str | None = Field(default=None, pattern=r'^(Pending|Under Review|Verified|Rejected)$')
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
+class WorkOrderCreate(BaseModel):
+    issueId: str = Field(min_length=1, max_length=240)
+    notes: str = Field(default='', max_length=500)
+    assignedTo: str = Field(min_length=1, max_length=80)
+
+
+class WorkOrderUpdate(BaseModel):
+    status: str = Field(pattern=r'^(Open|In Progress|Completed)$')
+
+
+ROLES = {'reviewer', 'coordinator', 'crew'}
+ISSUE_FIELDS = (
+    'type', 'location', 'neighborhood', 'latitude', 'longitude', 'priority', 'priorityScore',
+    'description', 'confidence', 'imageUrl', 'imageWidth', 'imageHeight', 'bbox',
+    'reviewStatus', 'sourceImageId', 'locationAccuracy',
+)
+
+
+def utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def read_actor(role, name):
+    cleaned_role = str(role or '').strip().lower()
+    cleaned_name = ' '.join(str(name or '').split())
+    if cleaned_role not in ROLES or not cleaned_name or len(cleaned_name) > 80:
+        raise HTTPException(401, 'Choose who is using Groundwork before continuing.')
+    return {'role': cleaned_role, 'name': cleaned_name}
+
+
+def present_order(order, issue):
+    view = dict(order)
+    if issue:
+        view.update({key: issue.get(key) for key in ISSUE_FIELDS})
+    return view
+
+
+def next_work_order_id(db):
+    current = 0
+    for (row_id,) in db.execute('SELECT id FROM work_orders'):
+        if isinstance(row_id, str) and row_id.startswith('WO-') and row_id[3:].isdigit():
+            current = max(current, int(row_id[3:]))
+    return f'WO-{current + 1:03d}'
 
 
 @app.get('/api/issues')
@@ -95,6 +142,82 @@ def update_issue(issue_id: str, update: ReviewRequest):
             issue['locationAccuracy'] = 'reviewer_adjusted'
         db.execute('UPDATE issues SET data=? WHERE id=?', (json.dumps(issue), issue_id))
     return issue
+
+
+@app.get('/api/work-orders')
+def list_work_orders(
+    role: str = Header(alias='X-Groundwork-Role'),
+    name: str = Header(alias='X-Groundwork-Name'),
+):
+    read_actor(role, name)
+    with connection() as db:
+        orders = [json.loads(row[0]) for row in db.execute('SELECT data FROM work_orders ORDER BY id')]
+        issues = {row[0]: json.loads(row[1]) for row in db.execute('SELECT id, data FROM issues')}
+    return [present_order(order, issues.get(order['issueId'])) for order in orders]
+
+
+@app.post('/api/work-orders', status_code=201)
+def create_work_order(
+    body: WorkOrderCreate,
+    role: str = Header(alias='X-Groundwork-Role'),
+    name: str = Header(alias='X-Groundwork-Name'),
+):
+    actor = read_actor(role, name)
+    if actor['role'] != 'coordinator':
+        raise HTTPException(403, 'Only a coordinator can create a work order.')
+    assigned_to = ' '.join(body.assignedTo.split())
+    if not assigned_to:
+        raise HTTPException(422, 'Choose who should receive this work order.')
+    with LOCK:
+        with connection() as db:
+            row = db.execute('SELECT data FROM issues WHERE id=?', (body.issueId,)).fetchone()
+            if not row:
+                raise HTTPException(404, 'Issue not found.')
+            issue = json.loads(row[0])
+            if issue.get('reviewStatus') != 'Verified':
+                raise HTTPException(409, 'A reviewer must verify this issue before a work order can be created.')
+            if issue.get('workOrderId'):
+                raise HTTPException(409, 'This issue already has a work order.')
+            order = {
+                'id': next_work_order_id(db), 'issueId': issue['id'], 'status': 'Open',
+                'notes': body.notes.strip(), 'assignedTo': assigned_to,
+                'createdBy': actor['name'], 'createdAt': utc_now(),
+            }
+            issue['workOrderId'] = order['id']
+            issue['workOrderStatus'] = order['status']
+            db.execute('INSERT INTO work_orders VALUES (?, ?)', (order['id'], json.dumps(order)))
+            db.execute('UPDATE issues SET data=? WHERE id=?', (json.dumps(issue), issue['id']))
+    return present_order(order, issue)
+
+
+@app.patch('/api/work-orders/{order_id}')
+def update_work_order(
+    order_id: str,
+    update: WorkOrderUpdate,
+    role: str = Header(alias='X-Groundwork-Role'),
+    name: str = Header(alias='X-Groundwork-Name'),
+):
+    actor = read_actor(role, name)
+    if actor['role'] not in {'crew', 'coordinator'}:
+        raise HTTPException(403, 'Only crew or a coordinator can update a work order.')
+    if not (order_id.startswith('WO-') and order_id[3:].isdigit()):
+        raise HTTPException(404, 'Work order not found.')
+    with LOCK:
+        with connection() as db:
+            row = db.execute('SELECT data FROM work_orders WHERE id=?', (order_id,)).fetchone()
+            if not row:
+                raise HTTPException(404, 'Work order not found.')
+            order = json.loads(row[0])
+            order['status'] = update.status
+            order['updatedBy'] = actor['name']
+            order['updatedAt'] = utc_now()
+            db.execute('UPDATE work_orders SET data=? WHERE id=?', (json.dumps(order), order_id))
+            issue_row = db.execute('SELECT data FROM issues WHERE id=?', (order['issueId'],)).fetchone()
+            issue = json.loads(issue_row[0]) if issue_row else None
+            if issue is not None:
+                issue['workOrderStatus'] = order['status']
+                db.execute('UPDATE issues SET data=? WHERE id=?', (json.dumps(issue), issue['id']))
+    return present_order(order, issue)
 
 
 @app.post('/api/analyze')
