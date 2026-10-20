@@ -84,8 +84,8 @@ def report_metadata(issue):
 
 
 class ReviewRequest(BaseModel):
-    priority: str | None = Field(default=None, pattern=r'^(Unassigned|Low|Medium|Critical)$')
-    zipCode: str | None = Field(default=None, pattern=r'^(?:[0-9]{5}(?:-[0-9]{4})?)?$')
+    priority: str | None = Field(default=None, pattern=r'^(Unassigned|Low|Medium|High|Critical)$')
+    priorityScore: float | None = Field(default=None, ge=0, le=100)
     reviewStatus: str | None = Field(default=None, pattern=r'^(Pending|Under Review|Verified|Rejected)$')
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)

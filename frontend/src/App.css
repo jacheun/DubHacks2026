@@ -504,45 +504,10 @@ h1 { font-size: clamp(30px, 3.1vw, 46px); font-weight: 700; letter-spacing: -1.5
 .priority-item .progress-track { margin-left: 16px; }
 .priority-item .issue-description { text-align: left; overflow-wrap: anywhere; }
 
-/* Infrastructure report uses the dashboard's sage palette and rounded controls. */
-.modal {
-  width: min(640px, calc(100% - 32px));
-  max-height: min(90dvh, 960px);
-  padding: 32px;
-  background: #fcfdf9;
-  color: var(--ink, #303a30);
-  border: 1px solid #e0e7d8;
-  border-radius: 24px;
-  box-shadow: 0 28px 70px #43583a40;
-  scrollbar-gutter: stable;
-}
-.modal h2 { padding-right: 28px; font-size: 28px; letter-spacing: -.7px; }
-.modal .eyebrow { color: #697861; font-size: 10px; letter-spacing: 1.5px; margin-bottom: 10px; }
-.modal p { color: #697861; overflow-wrap: anywhere; }
-.modal strong { color: #354c3f; }
-.modal a { color: #40553b; font-size: 12px; text-underline-offset: 3px; }
-.modal .close-button { background: #e8eddf; color: #40553b; top: 18px; right: 18px; }
-.modal .close-button:hover { background: #dce5d3; }
-.modal .evidence-image { margin-top: 24px; border-radius: 16px; overflow: hidden; border: 1px solid #e0e7d8; }
-.modal .evidence-image + p { margin: 10px 0 6px; font-size: 12px; }
-.modal-details { margin: 20px 0; padding: 18px; background: #f0f3e9; border: 1px solid #e2e8dc; border-radius: 16px; gap: 10px; }
-.modal-details p { display: flex; justify-content: space-between; gap: 20px; font-size: 12px; }
-.modal-details strong { flex-shrink: 0; font-weight: 600; }
-.modal .report-metadata-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px; background: #f0f3e9; border: 1px solid #e2e8dc; border-radius: 18px; margin: 24px 0; align-items: start; }
-.report-metadata-form h3 { grid-column: 1 / -1; font-size: 17px; letter-spacing: -.3px; }
-.modal label { display: grid; gap: 8px; margin: 0; color: #596b50; font-size: 12px; }
-.modal input, .modal select, .modal textarea { width: 100%; min-width: 0; padding: 11px 12px; color: #354c3f; background: #fff; border: 1px solid #d7e0cd; border-radius: 10px; font-size: 13px; }
-.modal input:hover, .modal select:hover { border-color: #a6b598; }
-.report-metadata-form > p, .report-metadata-form > button { grid-column: 1 / -1; }
-.modal .report-metadata-form > p { font-size: 11px; }
-.modal .report-metadata-form > button, .modal .work-order-form > button { border: 0; padding: 12px 18px; border-radius: 12px; background: #50664b; color: #fff; font-size: 12px; font-weight: 600; }
-.modal .report-metadata-form > button:hover { background: #40553b; }
-.modal .report-metadata-form > button:disabled { opacity: .6; cursor: wait; }
-.modal .report-feedback { padding: 10px 12px; background: #e1ebd8; border: 1px solid #c6d7ba; border-radius: 10px; color: #36542c; }
-.modal .report-feedback-error { background: #f8e8e2; border-color: #e9c6ba; color: #8a3d2c; }
-.modal #review-status { margin: 8px 0 16px; }
-@media (max-width: 520px) {
-  .modal { padding: 24px 18px; }
-  .modal .report-metadata-form { grid-template-columns: minmax(0, 1fr); padding: 16px; }
-  .modal-details p { flex-direction: column; gap: 2px; }
-}
+.priority-review-form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px; margin: 18px 0; background: #f1f5ed; border: 1px solid #dce4d8; border-radius: 10px; }
+.priority-review-form h3, .priority-review-form p { grid-column: 1 / -1; }
+.priority-review-form h3 { font-size: 15px; }
+.priority-review-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.priority-review-form p { font-size: 11px; line-height: 1.6; color: #53654e; }
+.priority-review-form button { justify-self: start; }
+@media (max-width: 520px) { .priority-review-form { grid-template-columns: 1fr; } }
