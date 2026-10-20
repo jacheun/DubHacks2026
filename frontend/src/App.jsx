@@ -155,7 +155,6 @@ function App() {
 
   useEffect(() => {
     let stopped = false
-    let seen = ''
     async function load() {
       try {
         const response = await fetch('/api/work-orders', { headers: actorHeaders(person, false) })
@@ -165,9 +164,6 @@ function App() {
         if (stopped) return
         setWorkOrders(data)
         setOrdersError('')
-        const signature = data.map(order => `${order.id}:${order.status}`).join('|')
-        if (signature === seen) return
-        seen = signature
         const issuesResponse = await fetch('/api/issues')
         if (!issuesResponse.ok || stopped) return
         const nextIssues = await readApiJson(issuesResponse)
@@ -226,7 +222,7 @@ function App() {
     }
   }, [selectedIssue])
 
-  const zipQuery = filters.zipCode.trim()
+  const zipQuery = filters.zipCode.replace(/\s/g, '').toUpperCase()
   const activeFilterCount = filterCategories.reduce((count, { key }) => count + filters[key].length, 0) + Number(Boolean(zipQuery))
   const query = search.trim().toLowerCase()
   const filteredIssues = issues.filter(issue =>
@@ -234,7 +230,7 @@ function App() {
       issue.longitude >= scanBounds[0] && issue.longitude <= scanBounds[2] &&
       issue.latitude >= scanBounds[1] && issue.latitude <= scanBounds[3])) &&
     filterCategories.every(({ key, property }) => !filters[key].length || filters[key].includes(issue[property])) &&
-    (!zipQuery || String(issue.zipCode ?? '').startsWith(zipQuery)) &&
+    (!zipQuery || String(issue.zipCode ?? '').replace(/\s/g, '').toUpperCase().startsWith(zipQuery)) &&
     (searchValues(issue).some(value => String(value).toLowerCase().includes(query)) ||
       (() => {
         const pair = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/)
@@ -288,23 +284,6 @@ function App() {
       const saved = await readApiJson(response)
       setIssues(previous => previous.map(issue => issue.id === id ? saved : issue))
       setSelectedIssue(previous => previous?.id === id ? saved : previous)
-    } catch (error) { setApiError(error.message) }
-  }
-
-  async function savePriority(event) {
-    event.preventDefault()
-    const fields = new FormData(event.currentTarget)
-    const score = String(fields.get('priorityScore') ?? '').trim()
-    setApiError('')
-    try {
-      const response = await fetch(`/api/issues/${encodeURIComponent(selectedIssue.id)}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priority: fields.get('priority'), ...(score !== '' ? { priorityScore: Number(score) } : {}) }),
-      })
-      const saved = await readApiJson(response)
-      if (!response.ok) throw new Error(failureMessage(saved, 'Could not save priority.'))
-      setIssues(previous => previous.map(issue => issue.id === saved.id ? saved : issue))
-      setSelectedIssue(previous => previous?.id === saved.id ? saved : previous)
     } catch (error) { setApiError(error.message) }
   }
 
@@ -404,7 +383,7 @@ function App() {
     const headers = [
       'Issue ID',
       'Type',
-      'ZIP Code',
+      'ZIP / Postal Code',
       'Location',
       'Priority',
       'Review ID',
@@ -643,13 +622,13 @@ function App() {
                 <button onClick={() => setFilters(createFilters())} disabled={!activeFilterCount}>Clear All</button>
               </div>
               <details className="filter-category" open>
-                <summary>ZIP Code{zipQuery && <span>1</span>}</summary>
+                <summary>ZIP / Postal Code{zipQuery && <span>1</span>}</summary>
                 <div className="coordinate-fields">
-                  <label htmlFor="zip-filter">ZIP code
-                    <input id="zip-filter" type="text" inputMode="numeric" placeholder="e.g. 98101"
+                  <label htmlFor="zip-filter">ZIP / postal code
+                    <input id="zip-filter" type="text" placeholder="e.g. 98101"
                       value={filters.zipCode} onChange={event => setFilters(previous => ({ ...previous, zipCode: event.target.value }))} />
                   </label>
-                  <p>Enter a full ZIP code or its first digits.</p>
+                  <p>Enter a full ZIP / postal code or its prefix.</p>
                 </div>
               </details>
               {filterCategories.map(({ key, label, property }) => (
@@ -892,7 +871,7 @@ function App() {
 
             <div className="modal-details">
               <p>
-                <strong>ZIP code:</strong> {selectedIssue.zipCode || 'Not assigned'}
+                <strong>ZIP / postal code:</strong> {selectedIssue.zipCode || 'Not assigned'}
               </p>
               <p>
                 <strong>Priority:</strong> {selectedIssue.priority}
@@ -920,32 +899,36 @@ function App() {
               )}
             </div>
 
-            {person.role !== 'crew' && (
-              <form key={`priority-${selectedIssue.id}`} className="priority-review-form" onSubmit={savePriority}>
-                <h3>Review repair priority</h3>
-                <label htmlFor="issue-priority">Priority
-                  <select id="issue-priority" name="priority" defaultValue={selectedIssue.priority}>
-                    {['Unassigned', 'Low', 'Medium', 'High', 'Critical'].map(value => <option key={value}>{value}</option>)}
+            {person.role === 'reviewer' ? (
+              <form key={selectedIssue.id} onSubmit={saveLocation} className="report-metadata-form">
+                <div className="metadata-heading">
+                  <div>
+                    <h3>Report metadata</h3>
+                    <p>Refine the location and set a repair priority.</p>
+                  </div>
+                  <span className="metadata-tag">Editable</span>
+                </div>
+                <div className="metadata-coordinates">
+                  <label htmlFor="metadata-latitude">Latitude
+                    <input id="metadata-latitude" name="latitude" type="number" step="any" min="-90" max="90" defaultValue={selectedIssue.latitude ?? ''} placeholder="47.6062" />
+                  </label>
+                  <label htmlFor="metadata-longitude">Longitude
+                    <input id="metadata-longitude" name="longitude" type="number" step="any" min="-180" max="180" defaultValue={selectedIssue.longitude ?? ''} placeholder="-122.3321" />
+                  </label>
+                </div>
+                <label htmlFor="metadata-priority">Repair priority
+                  <select id="metadata-priority" name="priority" defaultValue={selectedIssue.priority}>
+                    {['Unassigned', 'Low', 'Medium', 'Critical'].map(value => <option key={value}>{value}</option>)}
                   </select>
                 </label>
-                <label htmlFor="issue-priority-score">Priority score (0–100)
-                  <input id="issue-priority-score" name="priorityScore" type="number" min="0" max="100" step="1"
-                    defaultValue={selectedIssue.priorityScore ?? ''} placeholder="Unassigned" />
-                </label>
-                <p>Set by a reviewer; independent of model confidence. Leaving the score blank preserves its saved value.</p>
-                <button type="submit" className="export-button">Save priority</button>
-              </form>
-            )}
-            {person.role === 'reviewer' ? (
-              <form key={selectedIssue.id} onSubmit={saveLocation} className="analysis-form report-metadata-form">
-                <h3>Report metadata</h3>
-                <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" defaultValue={selectedIssue.latitude ?? ''} /></label>
-                <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" defaultValue={selectedIssue.longitude ?? ''} /></label>
-                <label>Priority<select name="priority" defaultValue={selectedIssue.priority}>
-                  {['Unassigned', 'Low', 'Medium', 'Critical'].map(value => <option key={value}>{value}</option>)}
-                </select></label>
-                <p>ZIP code: {selectedIssue.zipCode || 'Lookup pending or unavailable'} (from estimated coordinates)</p>
-                <button disabled={savingMetadata}>{savingMetadata ? 'Saving…' : 'Save report metadata'}</button>
+                <div className="metadata-postal">
+                  <div><span>ZIP / postal code</span><strong>{selectedIssue.zipCode || 'Lookup pending or unavailable'}</strong></div>
+                  <span className="metadata-postal-note">Based on estimated location</span>
+                </div>
+                <div className="metadata-actions">
+                  <p>Save to apply your changes.</p>
+                  <button type="submit" disabled={savingMetadata}>{savingMetadata ? 'Saving…' : 'Save changes'}</button>
+                </div>
                 {metadataFeedback && (!metadataFeedback.issueId || metadataFeedback.issueId === selectedIssue.id) && (
                   <p className={`report-feedback${metadataFeedback.error ? ' report-feedback-error' : ''}`} role={metadataFeedback.error ? 'alert' : 'status'}>{metadataFeedback.message}</p>
                 )}

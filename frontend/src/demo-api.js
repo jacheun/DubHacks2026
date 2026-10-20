@@ -10,6 +10,9 @@ export function createDemoApi(seed, storage) {
         // Repair labels from the initial seed without resetting user reviews or pins.
         parsed.issues = parsed.issues.map(issue => {
           const corrected = seed.issues.find(item => item.id === issue.id)
+          if (corrected && !issue.zipCode && issue.latitude === corrected.latitude && issue.longitude === corrected.longitude) {
+            issue = { ...issue, zipCode: corrected.zipCode }
+          }
           return corrected && (issue.locationLabelVersion || 0) < (corrected.locationLabelVersion || 0)
             ? { ...issue, location: corrected.location, neighborhood: corrected.neighborhood, locationLabelVersion: corrected.locationLabelVersion }
             : issue

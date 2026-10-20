@@ -71,3 +71,21 @@ test('corrected city labels migrate without losing user review, score, or adjust
   assert.equal(migrated.latitude,40.715)
   assert.equal(migrated.locationAccuracy,'reviewer_adjusted')
 })
+
+
+test('ZIP codes are bundled and migrate into existing browser data without resetting reviews', async () => {
+  const saved = storage()
+  const original = { issues: structuredClone(seed.issues), orders: [] }
+  for (const issue of original.issues) {
+    assert.match(issue.zipCode, /^\d{5}$/)
+    delete issue.zipCode
+    issue.reviewStatus = 'Verified'
+  }
+  saved.setItem('groundwork-saved-demo-v1', JSON.stringify(original))
+  const api = createDemoApi(seed, saved)
+  const issues = await (await api('/api/issues')).json()
+  for (const issue of issues) {
+    assert.equal(issue.zipCode, seed.issues.find(row => row.id === issue.id).zipCode)
+    assert.equal(issue.reviewStatus, 'Verified')
+  }
+})

@@ -28,7 +28,8 @@
       "reviewStatus": "Pending",
       "workOrderId": null,
       "workOrderStatus": "Not Created",
-      "locationLabelVersion": 2
+      "locationLabelVersion": 2,
+      "zipCode": "98103"
     },
     {
       "id": "demo-7666522790067752",
@@ -58,7 +59,8 @@
       "reviewStatus": "Pending",
       "workOrderId": null,
       "workOrderStatus": "Not Created",
-      "locationLabelVersion": 2
+      "locationLabelVersion": 2,
+      "zipCode": "11211"
     },
     {
       "id": "demo-1364413482492130",
@@ -88,7 +90,8 @@
       "reviewStatus": "Pending",
       "workOrderId": null,
       "workOrderStatus": "Not Created",
-      "locationLabelVersion": 2
+      "locationLabelVersion": 2,
+      "zipCode": "98133"
     },
     {
       "id": "demo-1198450109058670",
@@ -118,7 +121,8 @@
       "reviewStatus": "Pending",
       "workOrderId": null,
       "workOrderStatus": "Not Created",
-      "locationLabelVersion": 2
+      "locationLabelVersion": 2,
+      "zipCode": "98121"
     },
     {
       "id": "demo-1009587882779639",
@@ -148,7 +152,8 @@
       "reviewStatus": "Pending",
       "workOrderId": null,
       "workOrderStatus": "Not Created",
-      "locationLabelVersion": 2
+      "locationLabelVersion": 2,
+      "zipCode": "98112"
     }
   ]
 }
