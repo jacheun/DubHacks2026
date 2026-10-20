@@ -1,4 +1,17 @@
 # DubHacks2026
+
+Report metadata: new reports start with Unassigned priority. Reviewers assign
+Low, Medium, or Critical in the report details and save report metadata.
+Priority scores are no longer used. ZIP codes are looked up from estimated
+coordinates using Geocode Maps (https://geocode.maps.co/). Set
+`GEOCODING_API_KEY=your_key` in `groundworkAI/.env` to enable this; the Mapillary
+token is separate. Lookup results are cached in `runs/postal.sqlite3` and calls
+are serialized with at least 1.1 seconds between requests. Failed lookups retry
+after an hour and do not prevent damage reports being saved. Existing reports
+are filled in the background when loaded; refresh to see the completed ZIPs.
+Correcting coordinates refreshes the ZIP automatically. ZIP estimates may be
+unavailable or inaccurate near boundaries. Search accepts ZIP, priority, partial
+coordinates, or a `latitude, longitude` pair (within 2 km).
 Group Members: Shivram Venkatachalam, Samantha Oh, Jackson Cheung, Savannah Lee
 
 GroundworkAI is an AI-powered tool that detects road and sidewalk issues like potholes, cracks, and accessibility hazards using images. It helps pinpoint damaged areas and generates reports that local governments can use to prioritize repairs, making streets safer and more accessible for everyone.

@@ -2,7 +2,12 @@ import { useEffect } from 'react'
 import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
-const priorityColors = { Critical: '#c44735', High: '#d68b32', Medium: '#728a5c' }
+const priorityColors = {
+  Low: '#22c55e',
+  Medium: '#facc15',
+  Critical: '#ef4444',
+  Unassigned: '#94a3b8',
+}
 
 function MapControls({ issues, focusedIssue, onBoundsChange, fitSavedImages }) {
   const map = useMap()
@@ -73,7 +78,7 @@ export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectI
           eventHandlers={{ click: () => onFocusIssue(issue) }}
           pathOptions={{
             color: '#fff', weight: 2,
-            fillColor: priorityColors[issue.priority] ?? '#728a5c',
+            fillColor: priorityColors[issue.priority] ?? priorityColors.Unassigned,
             fillOpacity: 0.9,
           }}
         >
@@ -83,7 +88,7 @@ export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectI
               <strong>{issue.type}</strong>
               <p>{issue.location} · {issue.neighborhood}</p>
               <p>{issue.description}</p>
-              <p>{issue.priority} priority · Score {issue.priorityScore ?? 'Unassigned'}</p>
+              <p>{issue.priority} priority</p>
               <button type="button" onClick={() => onSelectIssue(issue)}>View issue details</button>
             </div>
           </Popup>

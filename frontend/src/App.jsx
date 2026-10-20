@@ -6,7 +6,6 @@ import { CREW, PEOPLE, actorHeaders, loadPerson, savePerson } from './people'
 import './App.css'
 
 const filterCategories = [
-  { key: 'neighborhood', label: 'Location', property: 'neighborhood' },
   { key: 'priority', label: 'Repair Priority', property: 'priority' },
   { key: 'type', label: 'Issue Type', property: 'type' },
   { key: 'reviewStatus', label: 'Review Status', property: 'reviewStatus' },
@@ -14,13 +13,14 @@ const filterCategories = [
 ]
 
 function createFilters() {
-  return { neighborhood: [], priority: [], type: [], reviewStatus: [], workOrderStatus: [],
-    coordinates: { latitude: '', longitude: '', radius: '2' } }
+  return { zipCode: '', priority: [], type: [], reviewStatus: [], workOrderStatus: [] }
 }
 
 function searchValues(issue) {
-  return [issue.location, issue.neighborhood, issue.type, String(issue.id),
-    `ISSUE-${String(issue.id).padStart(3, '0')}`, issue.reviewId, issue.workOrderId].filter(Boolean)
+  return [issue.location, issue.neighborhood, issue.type, issue.priority, issue.zipCode,
+    issue.latitude, issue.longitude, `${issue.latitude}, ${issue.longitude}`, String(issue.id),
+    `ISSUE-${String(issue.id).padStart(3, '0')}`, issue.reviewId, issue.workOrderId]
+    .filter(value => value !== null && value !== undefined && value !== '')
 }
 
 function calculateDistance(latitude, longitude, issueLatitude, issueLongitude) {
@@ -87,6 +87,8 @@ function App() {
   const [search, setSearch] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [selectedIssue, setSelectedIssue] = useState(null)
+  const [savingMetadata, setSavingMetadata] = useState(false)
+  const [metadataFeedback, setMetadataFeedback] = useState(null)
   const [focusedIssue, setFocusedIssue] = useState(null)
   const [mapView, setMapView] = useState('Satellite')
   const dialogRef = useRef(null)
@@ -224,24 +226,22 @@ function App() {
     }
   }, [selectedIssue])
 
-  const coordinateFilter = filters.coordinates
-  const hasCoordinates = coordinateFilter.latitude.trim() !== '' || coordinateFilter.longitude.trim() !== ''
-  const validCoordinates = coordinateFilter.latitude.trim() !== '' && coordinateFilter.longitude.trim() !== '' &&
-    Number.isFinite(Number(coordinateFilter.latitude)) && Math.abs(Number(coordinateFilter.latitude)) <= 90 &&
-    Number.isFinite(Number(coordinateFilter.longitude)) && Math.abs(Number(coordinateFilter.longitude)) <= 180 &&
-    Number.isFinite(Number(coordinateFilter.radius)) && Number(coordinateFilter.radius) > 0
-  const coordinateError = hasCoordinates && !validCoordinates
-  const activeFilterCount = filterCategories.reduce((count, { key }) => count + filters[key].length, 0) + Number(hasCoordinates)
+  const zipQuery = filters.zipCode.trim()
+  const activeFilterCount = filterCategories.reduce((count, { key }) => count + filters[key].length, 0) + Number(Boolean(zipQuery))
   const query = search.trim().toLowerCase()
   const filteredIssues = issues.filter(issue =>
     (DEMO_MODE || !scanBounds || (Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude) &&
       issue.longitude >= scanBounds[0] && issue.longitude <= scanBounds[2] &&
       issue.latitude >= scanBounds[1] && issue.latitude <= scanBounds[3])) &&
     filterCategories.every(({ key, property }) => !filters[key].length || filters[key].includes(issue[property])) &&
-    (!hasCoordinates || (validCoordinates && calculateDistance(
-      Number(coordinateFilter.latitude), Number(coordinateFilter.longitude), issue.latitude ?? NaN, issue.longitude ?? NaN
-    ) <= Number(coordinateFilter.radius))) &&
-    searchValues(issue).some(value => String(value).toLowerCase().includes(query))
+    (!zipQuery || String(issue.zipCode ?? '').startsWith(zipQuery)) &&
+    (searchValues(issue).some(value => String(value).toLowerCase().includes(query)) ||
+      (() => {
+        const pair = query.match(/^\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)\s*$/)
+        return pair && Math.abs(Number(pair[1])) <= 90 && Math.abs(Number(pair[2])) <= 180 &&
+          Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude) &&
+          calculateDistance(Number(pair[1]), Number(pair[2]), issue.latitude, issue.longitude) <= 2
+      })())
   )
   const suggestions = query ? [...new Set(filteredIssues.flatMap(searchValues))]
     .filter(value => String(value).toLowerCase().includes(query)).slice(0, 8) : []
@@ -310,19 +310,38 @@ function App() {
 
   async function saveLocation(event) {
     event.preventDefault()
+    if (savingMetadata) return
     const fields = new FormData(event.currentTarget)
+    const issueId = selectedIssue.id
+    const priority = fields.get('priority')
+    const payload = { priority }
+    if (fields.get('latitude') !== '' || fields.get('longitude') !== '') {
+      if (fields.get('latitude') === '' || fields.get('longitude') === '') {
+        setMetadataFeedback({ issueId, error: true, message: 'Enter both latitude and longitude, or leave both blank.' })
+        return
+      }
+      payload.latitude = Number(fields.get('latitude'))
+      payload.longitude = Number(fields.get('longitude'))
+    }
+    setSavingMetadata(true)
+    setMetadataFeedback(null)
     setApiError('')
     try {
-      const response = await fetch(`/api/issues/${encodeURIComponent(selectedIssue.id)}`, {
+      const response = await fetch(`/api/issues/${encodeURIComponent(issueId)}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude: Number(fields.get('latitude')), longitude: Number(fields.get('longitude')) }),
+        body: JSON.stringify(payload), signal: AbortSignal.timeout(15000),
       })
-      if (!response.ok) throw new Error('Could not save location.')
       const saved = await readApiJson(response)
+      if (!response.ok) throw new Error(failureMessage(saved, 'Could not save report metadata. Please retry.'))
+      if (saved.priority !== priority) throw new Error('The backend did not save the priority. Restart the Python backend with the latest code, then retry.')
       setIssues(previous => previous.map(issue => issue.id === saved.id ? saved : issue))
-      setSelectedIssue(saved)
-      setFocusedIssue(saved)
-    } catch (error) { setApiError(error.message) }
+      setSelectedIssue(current => current?.id === issueId ? saved : current)
+      if (Number.isFinite(saved.latitude) && Number.isFinite(saved.longitude)) setFocusedIssue(saved)
+      setMetadataFeedback({ issueId, error: false, message: 'Report metadata saved successfully.' })
+    } catch (error) {
+      setMetadataFeedback({ issueId, error: true, message: error.name === 'TimeoutError'
+        ? 'Save timed out. Reload the report to check whether it saved before retrying.' : error.message })
+    } finally { setSavingMetadata(false) }
   }
 
   async function createWorkOrder(event) {
@@ -385,9 +404,9 @@ function App() {
     const headers = [
       'Issue ID',
       'Type',
+      'ZIP Code',
       'Location',
       'Priority',
-      'Priority Score',
       'Review ID',
       'Review Status',
       'Work Order ID',
@@ -398,9 +417,9 @@ function App() {
     const rows = filteredIssues.map(issue => [
       issue.id,
       issue.type,
+      issue.zipCode,
       issue.location,
       issue.priority,
-      issue.priorityScore,
       issue.reviewId,
       issue.reviewStatus,
       issue.workOrderId ?? '',
@@ -591,8 +610,8 @@ function App() {
                   <circle cx="10.5" cy="10.5" r="6.5" />
                   <path d="m16 16 4.5 4.5" />
                 </svg>
-                <input id="issue-search" type="search" placeholder="Search roads, places, types, IDs…"
-                  aria-label="Search roads, neighborhoods, types, or IDs"
+                <input id="issue-search" type="search" placeholder="Search ZIP, priority, latitude, longitude…"
+                  aria-label="Search reports by ZIP, priority, coordinates, roads, types, or IDs"
                   value={search} autoComplete="off" aria-controls="search-suggestions"
                   onFocus={() => setSearchOpen(true)}
                   onKeyDown={event => { if (event.key === 'Escape') setSearchOpen(false) }}
@@ -623,13 +642,23 @@ function App() {
                 <h2>Filters <span>{activeFilterCount}</span></h2>
                 <button onClick={() => setFilters(createFilters())} disabled={!activeFilterCount}>Clear All</button>
               </div>
+              <details className="filter-category" open>
+                <summary>ZIP Code{zipQuery && <span>1</span>}</summary>
+                <div className="coordinate-fields">
+                  <label htmlFor="zip-filter">ZIP code
+                    <input id="zip-filter" type="text" inputMode="numeric" placeholder="e.g. 98101"
+                      value={filters.zipCode} onChange={event => setFilters(previous => ({ ...previous, zipCode: event.target.value }))} />
+                  </label>
+                  <p>Enter a full ZIP code or its first digits.</p>
+                </div>
+              </details>
               {filterCategories.map(({ key, label, property }) => (
                 <details key={key} className="filter-category" open>
                   <summary>{label}{filters[key].length > 0 && <span>{filters[key].length}</span>}</summary>
                   <fieldset>
                     <legend className="sr-only">{label}</legend>
-                    {(key === 'priority' ? ['Critical', 'High', 'Medium', 'Low'] :
-                      [...new Set(issues.map(issue => issue[property]))].sort()).map(value => (
+                    {(key === 'priority' ? ['Critical', 'Medium', 'Low', 'Unassigned'] :
+                      [...new Set(issues.map(issue => issue[property]).filter(Boolean))].sort()).map(value => (
                       <label className="filter-checkbox" key={value}>
                         <input type="checkbox" checked={filters[key].includes(value)} onChange={() => toggleFilter(key, value)} />
                         <span>{value}</span>
@@ -637,27 +666,7 @@ function App() {
                       </label>
                     ))}
                   </fieldset>
-                  {key === 'neighborhood' && (
-                    <div className="coordinate-fields">
-                      <p>Search near coordinates</p>
-                      {[
-                        ['latitude', 'Latitude', -90, 90], ['longitude', 'Longitude', -180, 180],
-                        ['radius', 'Radius (km)', 0.1, undefined]
-                      ].map(([key, label, min, max]) => (
-                        <label key={key}>{label}
-                          <input type="number" step="any" min={min} max={max} value={coordinateFilter[key]}
-                            aria-describedby="coordinate-help" aria-invalid={coordinateError || undefined}
-                            onChange={event => setFilters(previous => ({ ...previous,
-                              coordinates: { ...previous.coordinates, [key]: event.target.value }
-                            }))} />
-                        </label>
-                      ))}
-                      <p id="coordinate-help" className={coordinateError ? 'filter-error' : ''}>
-                        {coordinateError ? 'Enter latitude (−90 to 90), longitude (−180 to 180), and a radius greater than 0.' :
-                          'Enter both coordinates and a positive radius in km. Coordinates count as one filter.'}
-                      </p>
-                    </div>
-                  )}
+
                 </details>
               ))}
             </aside>
@@ -719,7 +728,7 @@ function App() {
             <div className="priority-list">
 
               {[...filteredIssues]
-                .sort((a, b) => b.priorityScore - a.priorityScore)
+                .sort((a, b) => ({ Critical: 3, Medium: 2, Low: 1 }[b.priority] ?? 0) - ({ Critical: 3, Medium: 2, Low: 1 }[a.priority] ?? 0))
                 .map(issue => (
 
                 <button
@@ -737,7 +746,7 @@ function App() {
                       <span className="priority-name">{issue.location}</span>
                     </span>
 
-                    <strong>{issue.priorityScore ?? 'Unassigned'}</strong>
+                    <strong>{issue.priority}</strong>
                   </span>
 
                   <span className="issue-id">
@@ -759,14 +768,7 @@ function App() {
                     </span>
                   </span>
 
-                  <span className="progress-track">
-                    <span
-                      className={`progress-fill ${issue.priority.toLowerCase()}`}
-                      style={{
-                        width: `${issue.priorityScore ?? 0}%`
-                      }}
-                    ></span>
-                  </span>
+
 
                 </button>
               ))}
@@ -890,12 +892,13 @@ function App() {
 
             <div className="modal-details">
               <p>
+                <strong>ZIP code:</strong> {selectedIssue.zipCode || 'Not assigned'}
+              </p>
+              <p>
                 <strong>Priority:</strong> {selectedIssue.priority}
               </p>
 
-              <p>
-                <strong>Priority Score:</strong> {selectedIssue.priorityScore ?? 'Unassigned'}
-              </p>
+
 
               <p>
                 <strong>Review ID:</strong> {selectedIssue.reviewId}
@@ -934,10 +937,18 @@ function App() {
               </form>
             )}
             {person.role === 'reviewer' ? (
-              <form key={selectedIssue.id} onSubmit={saveLocation} className="analysis-form">
-                <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required defaultValue={selectedIssue.latitude ?? ''} /></label>
-                <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" required defaultValue={selectedIssue.longitude ?? ''} /></label>
-                <button>Save estimated location</button>
+              <form key={selectedIssue.id} onSubmit={saveLocation} className="analysis-form report-metadata-form">
+                <h3>Report metadata</h3>
+                <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" defaultValue={selectedIssue.latitude ?? ''} /></label>
+                <label>Longitude<input name="longitude" type="number" step="any" min="-180" max="180" defaultValue={selectedIssue.longitude ?? ''} /></label>
+                <label>Priority<select name="priority" defaultValue={selectedIssue.priority}>
+                  {['Unassigned', 'Low', 'Medium', 'Critical'].map(value => <option key={value}>{value}</option>)}
+                </select></label>
+                <p>ZIP code: {selectedIssue.zipCode || 'Lookup pending or unavailable'} (from estimated coordinates)</p>
+                <button disabled={savingMetadata}>{savingMetadata ? 'Saving…' : 'Save report metadata'}</button>
+                {metadataFeedback && (!metadataFeedback.issueId || metadataFeedback.issueId === selectedIssue.id) && (
+                  <p className={`report-feedback${metadataFeedback.error ? ' report-feedback-error' : ''}`} role={metadataFeedback.error ? 'alert' : 'status'}>{metadataFeedback.message}</p>
+                )}
               </form>
             ) : (
               <p>
