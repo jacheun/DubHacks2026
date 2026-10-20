@@ -87,3 +87,28 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for the Vercel frontend/API bridge and Render
 Docker backend with bundled weights and persistent storage. The selected
 `groundworkAI/models/best.pt` is intentionally versioned for deployment; other
 model files, training data, local secrets, and generated runs remain ignored.
+
+## Saved-image demo (default)
+
+Run `npm run dev` to use five bundled Mapillary images with saved YOLO crack
+predictions. No Python server, Mapillary token, live inference, or Cloudflare
+Tunnel is needed. The map fits the saved examples and live scan controls are
+replaced with a saved-demo banner. All five findings start Pending, with repair
+priority unassigned; confidence is not a severity score.
+
+Reviewer decisions, adjusted locations, priorities, and coordinator/crew work
+orders persist in this browser's localStorage. They are not shared between users
+or devices. The same default demo works as a static Vercel frontend. Basemap tiles
+and opening external Mapillary source links still require internet access.
+
+The five original photos live in `frontend/public/demo/images/`; detection data
+and provenance are in `frontend/src/demo-data.json`. These are actual stored model
+predictions, not verified field reports. They show cracks, not pothole detections.
+The demo retains the strongest prediction per photo.
+
+To deliberately restore the live backend workflow, set `VITE_USE_LIVE_API=true`
+before starting Vite or building for deployment. Hosted live mode additionally
+requires the API backend/proxy configuration in DEPLOYMENT.md. Leave this variable
+unset for the standalone saved demo.
+
+Run `node --test scripts/test-demo-api.mjs` to check the saved-demo workflows.

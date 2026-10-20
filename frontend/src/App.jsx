@@ -1,4 +1,4 @@
-import { readApiJson } from './api'
+import { readApiJson, apiFetch as fetch, DEMO_MODE } from './api'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import IssueMap from './components/IssueMap'
 import WorkOrders from './components/WorkOrders'
@@ -94,7 +94,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [analyzing, setAnalyzing] = useState(false)
   const [scanBounds, setScanBounds] = useState(null)
-  const [autoScan, setAutoScan] = useState(true)
+  const [autoScan, setAutoScan] = useState(!DEMO_MODE)
   const scanRequest = useRef(0)
   const [scanId, setScanId] = useState(null)
   const [scanLimit, setScanLimit] = useState(10)
@@ -125,7 +125,7 @@ function App() {
 
   const scanArea = useCallback(async (event) => {
     event?.preventDefault()
-    if (!scanBounds) return
+    if (DEMO_MODE || !scanBounds) return
     const request = ++scanRequest.current
     setScanId(null)
     setAnalyzing(true)
@@ -146,7 +146,7 @@ function App() {
   }, [scanBounds, scanLimit])
 
   useEffect(() => {
-    if (screen !== 'dashboard' || person.role === 'crew' || !autoScan || !scanBounds) return undefined
+    if (DEMO_MODE || screen !== 'dashboard' || person.role === 'crew' || !autoScan || !scanBounds) return undefined
     const timer = setTimeout(() => { scanArea() }, 900)
     return () => clearTimeout(timer)
   }, [screen, person.role, autoScan, scanBounds, scanArea])
@@ -234,7 +234,7 @@ function App() {
   const activeFilterCount = filterCategories.reduce((count, { key }) => count + filters[key].length, 0) + Number(hasCoordinates)
   const query = search.trim().toLowerCase()
   const filteredIssues = issues.filter(issue =>
-    (!scanBounds || (Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude) &&
+    (DEMO_MODE || !scanBounds || (Number.isFinite(issue.latitude) && Number.isFinite(issue.longitude) &&
       issue.longitude >= scanBounds[0] && issue.longitude <= scanBounds[2] &&
       issue.latitude >= scanBounds[1] && issue.latitude <= scanBounds[3])) &&
     filterCategories.every(({ key, property }) => !filters[key].length || filters[key].includes(issue[property])) &&
@@ -288,6 +288,23 @@ function App() {
       const saved = await readApiJson(response)
       setIssues(previous => previous.map(issue => issue.id === id ? saved : issue))
       setSelectedIssue(previous => previous?.id === id ? saved : previous)
+    } catch (error) { setApiError(error.message) }
+  }
+
+  async function savePriority(event) {
+    event.preventDefault()
+    const fields = new FormData(event.currentTarget)
+    const score = String(fields.get('priorityScore') ?? '').trim()
+    setApiError('')
+    try {
+      const response = await fetch(`/api/issues/${encodeURIComponent(selectedIssue.id)}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: fields.get('priority'), ...(score !== '' ? { priorityScore: Number(score) } : {}) }),
+      })
+      const saved = await readApiJson(response)
+      if (!response.ok) throw new Error(failureMessage(saved, 'Could not save priority.'))
+      setIssues(previous => previous.map(issue => issue.id === saved.id ? saved : issue))
+      setSelectedIssue(previous => previous?.id === saved.id ? saved : previous)
     } catch (error) { setApiError(error.message) }
   }
 
@@ -486,6 +503,21 @@ function App() {
           />
         ) : (
         <>
+        {DEMO_MODE ? (
+          <section className="scan-console" aria-label="Saved-image demo">
+            <div className="scan-toolbar">
+              <div className="scan-heading"><div>
+                <h2>Saved inspection demo</h2>
+                <p>Five saved images with real YOLO crack predictions. No live imagery scanning.</p>
+              </div></div>
+              <span className="review-badge">5 saved detections</span>
+            </div>
+            <div className="scan-status-bar"><p role="status">Review decisions, priorities, and work orders are saved in this browser. Predictions require human verification.</p></div>
+            {loading && <p role="status">Loading saved inspections…</p>}
+            {apiError && <p role="alert">{apiError}</p>}
+          </section>
+        ) : (
+          <>
         <section className="scan-console" aria-labelledby="scan-console-title" aria-busy={analyzing}>
           <form className="scan-toolbar" onSubmit={scanArea}>
             <div className="scan-heading">
@@ -533,16 +565,19 @@ function App() {
           </div>
         </section>
 
+          </>
+        )}
+
         {/* HEADER */}
         <div className="dashboard-header">
           <div>
-            <p className="dashboard-location">Seattle, WA</p>
+            <p className="dashboard-location">{DEMO_MODE ? 'Seattle area, WA · Brooklyn, NY' : 'Seattle, WA'}</p>
 
             <h1>Road Condition Overview</h1>
 
             <p className="subtitle">
               AI-Powered Road and Sidewalk Inspection
-              Within Seattle City Limits
+              {DEMO_MODE ? 'Saved inspection examples' : 'Within Seattle City Limits'}
             </p>
             <p className="role-banner">{person.summary}</p>
           </div>
@@ -636,7 +671,7 @@ function App() {
 
             <div className="map-overlay">
               <span className="map-label">
-                ● SEATTLE ISSUE MAP
+                ● {DEMO_MODE ? 'SAVED INSPECTION MAP' : 'SEATTLE ISSUE MAP'}
               </span>
 
               <div className="map-controls">
@@ -662,6 +697,7 @@ function App() {
               onSelectIssue={setSelectedIssue}
               view={mapView}
               onBoundsChange={handleMapBoundsChange}
+              fitSavedImages={DEMO_MODE}
             />
 
 
@@ -689,7 +725,7 @@ function App() {
                 <button
                   className="priority-item"
                   key={issue.id}
-                  onClick={() => focusOnIssue(issue)}
+                  onClick={() => { focusOnIssue(issue); setSelectedIssue(issue) }}
                 >
 
                   <span className="priority-title">
@@ -762,7 +798,7 @@ function App() {
               <button
                 className="issue-card"
                 key={issue.id}
-                onClick={() => focusOnIssue(issue)}
+                onClick={() => { focusOnIssue(issue); setSelectedIssue(issue) }}
               >
                 <span>
                   <strong className="issue-type">{issue.type}</strong>
@@ -881,6 +917,22 @@ function App() {
               )}
             </div>
 
+            {person.role !== 'crew' && (
+              <form key={`priority-${selectedIssue.id}`} className="priority-review-form" onSubmit={savePriority}>
+                <h3>Review repair priority</h3>
+                <label htmlFor="issue-priority">Priority
+                  <select id="issue-priority" name="priority" defaultValue={selectedIssue.priority}>
+                    {['Unassigned', 'Low', 'Medium', 'High', 'Critical'].map(value => <option key={value}>{value}</option>)}
+                  </select>
+                </label>
+                <label htmlFor="issue-priority-score">Priority score (0–100)
+                  <input id="issue-priority-score" name="priorityScore" type="number" min="0" max="100" step="1"
+                    defaultValue={selectedIssue.priorityScore ?? ''} placeholder="Unassigned" />
+                </label>
+                <p>Set by a reviewer; independent of model confidence. Leaving the score blank preserves its saved value.</p>
+                <button type="submit" className="export-button">Save priority</button>
+              </form>
+            )}
             {person.role === 'reviewer' ? (
               <form key={selectedIssue.id} onSubmit={saveLocation} className="analysis-form">
                 <label>Latitude<input name="latitude" type="number" step="any" min="-90" max="90" required defaultValue={selectedIssue.latitude ?? ''} /></label>

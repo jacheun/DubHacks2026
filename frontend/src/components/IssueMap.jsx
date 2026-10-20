@@ -4,8 +4,13 @@ import 'leaflet/dist/leaflet.css'
 
 const priorityColors = { Critical: '#c44735', High: '#d68b32', Medium: '#728a5c' }
 
-function MapControls({ issues, focusedIssue, onBoundsChange }) {
+function MapControls({ issues, focusedIssue, onBoundsChange, fitSavedImages }) {
   const map = useMap()
+  const savedCoordinates = fitSavedImages ? JSON.stringify(issues.map(issue => [issue.latitude, issue.longitude])) : '[]'
+  useEffect(() => {
+    const points = JSON.parse(savedCoordinates)
+    if (points.length) map.fitBounds(points, { padding: [35, 35], maxZoom: 16 })
+  }, [map, savedCoordinates])
 
   useEffect(() => {
     function reportBounds() {
@@ -40,7 +45,7 @@ function MapControls({ issues, focusedIssue, onBoundsChange }) {
   )
 }
 
-export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectIssue, view = 'Road', onBoundsChange }) {
+export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectIssue, view = 'Road', onBoundsChange, fitSavedImages = false }) {
   const satellite = view === 'Satellite'
 
   return (
@@ -59,7 +64,7 @@ export default function IssueMap({ issues, focusedIssue, onFocusIssue, onSelectI
           ? 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
           : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}
       />
-      <MapControls issues={issues} focusedIssue={focusedIssue} onBoundsChange={onBoundsChange} />
+      <MapControls issues={issues} focusedIssue={focusedIssue} onBoundsChange={onBoundsChange} fitSavedImages={fitSavedImages} />
       {issues.map(issue => (
         <CircleMarker
           key={issue.id}
